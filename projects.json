@@ -1,0 +1,34 @@
+[
+  {
+    "name": "CODEX_FORMS",
+    "status": "active",
+    "path": "D:\\CODEX_PROJECTS\\CODEX_FORMS",
+    "type": "forms",
+    "startup_context": "Forms workspace. Do not overwrite templates. Prefer field fill over overlay.",
+    "notes": ""
+  },
+  {
+    "name": "DHERST_AUDIT",
+    "status": "active",
+    "path": "D:\\CODEX_PROJECTS\\DHERST_Audit_Review",
+    "type": "document_audit",
+    "startup_context": "DHERST audit mode. Controlled edits only when instructed.",
+    "notes": ""
+  },
+  {
+    "name": "FODE_RUNTIME",
+    "status": "active",
+    "path": "D:\\CODEX_PROJECTS\\FODE_Runtime",
+    "type": "apps_script",
+    "startup_context": "CIS only. Strict release discipline. Canonical URL rules apply.",
+    "notes": ""
+  },
+  {
+    "name": "ZOHO_CRM",
+    "status": "active",
+    "path": "D:\\CODEX\\projects\\ZOHO_CRM",
+    "type": "crm",
+    "startup_context": "Zoho CRM workspace. No live CRM changes. Preserve imports and avoid guessed field mappings.",
+    "notes": "Friendly label: Zoho CRM"
+  }
+]

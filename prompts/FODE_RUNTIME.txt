@@ -1,0 +1,5 @@
+FODE runtime mode.
+CIS only. Strict release discipline. Canonical URL rules apply.
+Do not modify unrelated files.
+Follow any project instructions in AGENTS.md before making changes.
+Before execution, print the repo root, git status -sb, and scoped files before any change. If the workspace is not C:\Clasp\FODE_Downstream_Runtime, stop.

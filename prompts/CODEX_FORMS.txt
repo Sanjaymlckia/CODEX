@@ -1,0 +1,4 @@
+CODEX_FORMS mode.
+Forms workspace. Do not overwrite templates. Prefer field fill over overlay.
+Follow any project instructions in AGENTS.md before making changes.
+Before execution, print the current working directory and the files in scope. If the workspace is not D:\CODEX_PROJECTS\CODEX_FORMS, stop.

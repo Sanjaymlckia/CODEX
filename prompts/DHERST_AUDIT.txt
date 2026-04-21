@@ -1,0 +1,5 @@
+DHERST audit mode.
+Allowed: read .docx, audit links, controlled edits only when instructed.
+Forbidden: switching directories, touching FODE or Apps Script repos, unrelated file edits.
+Follow any project instructions in AGENTS.md before making changes.
+Before execution, print the current working directory and the files in scope. If the workspace is not C:\Codex_DHERST\DHERST_Audit_Review, stop.
