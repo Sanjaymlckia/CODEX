@@ -25,7 +25,26 @@ powershell -ExecutionPolicy Bypass -File C:\CODEX\RUN.ps1
 - `COMMAND_LIBRARY.md` - quick operational commands
 - `projects\projects.json` - canonical office project registry
 - `prompts\` - per-project startup prompts
-- `state\` - restart-safe launcher state such as the last opened project
+- `state\` - restart-safe launcher state such as the last opened and recent projects
+
+## Launcher Features
+
+- Recent-project memory with a dedicated recent-project menu
+- Quick-open `CURRENT_TASK.md` for any active project
+- Snapshot handoff helper that creates a dated file inside a selected project's `SNAPSHOT\` folder
+- Per-project status line showing whether the target is a git repo or a standard folder
+- Desktop shortcut support via `codexhub` and a `CODEX HUB` shortcut
+
+Current launcher options:
+
+- Number key - open the selected active project
+- `R` - resume the last opened project
+- `J` - open from recent projects
+- `T` - quick-open `CURRENT_TASK.md`
+- `S` - create a snapshot handoff file
+- `C` - open the command library
+- `H` - open the `C:\CODEX` hub root
+- `0` - exit
 
 ## Project Discipline
 

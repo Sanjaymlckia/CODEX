@@ -16,6 +16,7 @@ function Get-Root {
 function Get-RegPath { Join-Path -Path (Get-Root) -ChildPath "projects\projects.json" }
 function Get-StateRoot { Join-Path -Path (Get-Root) -ChildPath "state" }
 function Get-LastPath { Join-Path -Path (Get-StateRoot) -ChildPath "last_project.txt" }
+function Get-RecentPath { Join-Path -Path (Get-StateRoot) -ChildPath "recent_projects.json" }
 function Get-PromptsRoot { Join-Path -Path (Get-Root) -ChildPath "prompts" }
 function Get-CommandLibraryPath { Join-Path -Path (Get-Root) -ChildPath "COMMAND_LIBRARY.md" }
 
@@ -113,6 +114,64 @@ function Set-LastProjectName {
     Set-Content -LiteralPath $lastPath -Value $Name -Encoding utf8
 }
 
+function Load-RecentProjects {
+    $recentPath = Get-RecentPath
+    if (-not (Test-Path -LiteralPath $recentPath)) {
+        return @()
+    }
+
+    $raw = Get-Content -LiteralPath $recentPath -Raw -Encoding utf8
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        return @()
+    }
+
+    try {
+        $parsed = $raw | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        return @()
+    }
+
+    if ($parsed -is [System.Array]) {
+        return @($parsed)
+    }
+
+    return @($parsed)
+}
+
+function Save-RecentProjects {
+    param([object[]]$Items)
+
+    $recentPath = Get-RecentPath
+    Ensure-ParentDirectory -Path $recentPath
+    @($Items) | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $recentPath -Encoding utf8
+}
+
+function Add-RecentProject {
+    param([object]$Project)
+
+    if ($null -eq $Project) {
+        return
+    }
+
+    $now = (Get-Date).ToString("s")
+    $updated = @(
+        [pscustomobject]@{
+            name         = $Project.name
+            display_name = Get-Label -Project $Project
+            path         = $Project.path
+            opened_at    = $now
+        }
+    )
+
+    foreach ($item in (Load-RecentProjects)) {
+        if (-not [string]::Equals([string]$item.name, $Project.name, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $updated += $item
+        }
+    }
+
+    Save-RecentProjects -Items ($updated | Select-Object -First 5)
+}
+
 function Find-ProjectIndexByName {
     param(
         [object[]]$Projects,
@@ -138,20 +197,41 @@ function ConvertTo-SingleQuotedPowerShellLiteral {
     return "'" + $Value.Replace("'", "''") + "'"
 }
 
+function Test-IsGitRepo {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return $false
+    }
+
+    return Test-Path -LiteralPath (Join-Path -Path $Path -ChildPath ".git")
+}
+
+function Get-CurrentTaskPath {
+    param([object]$Project)
+
+    return Join-Path -Path $Project.path -ChildPath "CURRENT_TASK.md"
+}
+
 function Show-Header {
     $reg = @(Load-Reg)
     $active = @(Get-ProjectsByStatus -Projects $reg -Status @("active")).Count
     $deprecated = @(Get-ProjectsByStatus -Projects $reg -Status @("deprecated")).Count
     $archived = @(Get-ProjectsByStatus -Projects $reg -Status @("archived")).Count
     $last = Get-LastProjectName
+    $recent = @(Load-RecentProjects)
 
     Clear-Host
-    Write-Host "=================================" -ForegroundColor Cyan
-    Write-Host "        CODEX HUB LAUNCHER       " -ForegroundColor Cyan
-    Write-Host "=================================" -ForegroundColor Cyan
-    Write-Host "Active: $active   Deprecated: $deprecated   Archived: $archived"
+    Write-Host "=============================================" -ForegroundColor DarkCyan
+    Write-Host "               CODEX HUB LAUNCHER            " -ForegroundColor Cyan
+    Write-Host "=============================================" -ForegroundColor DarkCyan
+    Write-Host (" Active: {0}   Deprecated: {1}   Archived: {2}" -f $active, $deprecated, $archived) -ForegroundColor Gray
     if ($last) {
-        Write-Host "Last: $last"
+        Write-Host (" Last: {0}" -f $last) -ForegroundColor DarkGray
+    }
+    if ($recent.Count -gt 0) {
+        $recentLabels = @($recent | Select-Object -First 3 | ForEach-Object { $_.display_name })
+        Write-Host (" Recent: {0}" -f ($recentLabels -join " | ")) -ForegroundColor DarkGray
     }
     Write-Host ""
 }
@@ -171,6 +251,7 @@ function Open-Proj {
     }
 
     Set-LastProjectName -Name $Project.name
+    Add-RecentProject -Project $Project
 
     $projectNameLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $Project.name
     $displayNameLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value (Get-Label -Project $Project)
@@ -188,23 +269,23 @@ function Open-Proj {
 
 Set-Location -LiteralPath `$projectPath
 
-Write-Host '=================================' -ForegroundColor Cyan
+Write-Host '=================================' -ForegroundColor DarkCyan
 Write-Host " `$displayName" -ForegroundColor Cyan
-Write-Host '=================================' -ForegroundColor Cyan
-Write-Host "Path: `$projectPath"
-Write-Host "Context: `$startupContext"
+Write-Host '=================================' -ForegroundColor DarkCyan
+Write-Host "Path: `$projectPath" -ForegroundColor Gray
+Write-Host "Context: `$startupContext" -ForegroundColor DarkGray
 Write-Host ''
 
 if (Test-Path -LiteralPath `$currentTaskPath) {
     Write-Host 'CURRENT_TASK.md' -ForegroundColor Magenta
-    Write-Host '---------------' -ForegroundColor Magenta
+    Write-Host '---------------' -ForegroundColor DarkMagenta
     Get-Content -LiteralPath `$currentTaskPath -Encoding utf8
     Write-Host ''
 }
 
 if (Test-Path -LiteralPath '.\.git') {
     Write-Host 'git status -sb' -ForegroundColor Magenta
-    Write-Host '--------------' -ForegroundColor Magenta
+    Write-Host '--------------' -ForegroundColor DarkMagenta
     git status -sb
     Write-Host ''
 }
@@ -232,6 +313,46 @@ if (Get-Command codex -ErrorAction SilentlyContinue) {
     ) | Out-Null
 }
 
+function Pick-Project {
+    param(
+        [object[]]$Projects,
+        [string]$Title
+    )
+
+    $items = @($Projects | Where-Object { $null -ne $_ })
+    if ($items.Count -eq 0) {
+        Write-Host "No projects available." -ForegroundColor Yellow
+        return $null
+    }
+
+    Write-Host ""
+    Write-Host $Title -ForegroundColor Cyan
+    Write-Host ""
+
+    for ($i = 0; $i -lt $items.Count; $i++) {
+        $project = $items[$i]
+        $repoStatus = if (Test-IsGitRepo -Path $project.path) { "git" } else { "folder" }
+        Write-Host ("{0,2}. {1}" -f ($i + 1), (Get-Label -Project $project)) -ForegroundColor White
+        Write-Host ("    {0} [{1}]" -f $project.path, $repoStatus) -ForegroundColor DarkGray
+    }
+
+    Write-Host ""
+    $rawSelection = Read-Host "Select project #"
+    if ([string]::IsNullOrWhiteSpace($rawSelection)) {
+        return $null
+    }
+
+    if ($rawSelection -match '^\d+$') {
+        $index = [int]$rawSelection - 1
+        if ($index -ge 0 -and $index -lt $items.Count) {
+            return $items[$index]
+        }
+    }
+
+    Write-Host "Invalid selection." -ForegroundColor Yellow
+    return $null
+}
+
 function Resume-Last {
     $name = Get-LastProjectName
     if (-not $name) {
@@ -249,6 +370,82 @@ function Resume-Last {
     Open-Proj -Project $reg[$index]
 }
 
+function Open-CurrentTaskQuick {
+    param([object]$Project)
+
+    if ($null -eq $Project) {
+        return
+    }
+
+    $taskPath = Get-CurrentTaskPath -Project $Project
+    if (-not (Test-Path -LiteralPath $taskPath)) {
+        Write-Host "CURRENT_TASK.md not found for $($Project.name)." -ForegroundColor Yellow
+        return
+    }
+
+    $taskPathLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $taskPath
+    Start-Process powershell.exe -ArgumentList @(
+        "-NoExit",
+        "-ExecutionPolicy", "Bypass",
+        "-Command", "Get-Content -LiteralPath $taskPathLiteral -Encoding utf8"
+    ) | Out-Null
+}
+
+function Show-RecentProjectsMenu {
+    $reg = @(Load-Reg)
+    $recentEntries = @(Load-RecentProjects)
+    $resolved = @()
+
+    foreach ($entry in $recentEntries) {
+        $index = Find-ProjectIndexByName -Projects $reg -Name $entry.name
+        if ($index -ge 0) {
+            $resolved += $reg[$index]
+        }
+    }
+
+    $selected = Pick-Project -Projects $resolved -Title "Recent Projects"
+    if ($null -ne $selected) {
+        Open-Proj -Project $selected
+    }
+}
+
+function New-SnapshotHandoff {
+    param([object]$Project)
+
+    if ($null -eq $Project) {
+        return
+    }
+
+    $snapshotDir = Join-Path -Path $Project.path -ChildPath "SNAPSHOT"
+    if (-not (Test-Path -LiteralPath $snapshotDir)) {
+        Write-Host "SNAPSHOT folder not found: $snapshotDir" -ForegroundColor Yellow
+        return
+    }
+
+    $stamp = Get-Date -Format "yyyy-MM-dd_HHmm"
+    $fileName = "HANDOFF_$stamp.md"
+    $snapshotPath = Join-Path -Path $snapshotDir -ChildPath $fileName
+    $taskPath = Get-CurrentTaskPath -Project $Project
+    $currentTaskSummary = if (Test-Path -LiteralPath $taskPath) { Get-Content -LiteralPath $taskPath -TotalCount 12 -Encoding utf8 } else { @("CURRENT_TASK.md not found.") }
+
+    $content = @(
+        "# HANDOFF SNAPSHOT"
+        ""
+        "- Project: $(Get-Label -Project $Project)"
+        "- Path: $($Project.path)"
+        "- Created: $((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))"
+        "- Git repo: $(if (Test-IsGitRepo -Path $Project.path) { 'Yes' } else { 'No' })"
+        ""
+        "## Resume Point"
+        "- Record the next exact action here."
+        ""
+        "## Current Task Snapshot"
+    ) + $currentTaskSummary
+
+    $content | Set-Content -LiteralPath $snapshotPath -Encoding utf8
+    Write-Host "Created snapshot: $snapshotPath" -ForegroundColor Green
+}
+
 while ($true) {
     Show-Header
     $activeProjects = @(Get-ProjectsByStatus -Projects (Load-Reg) -Status @("active"))
@@ -256,15 +453,20 @@ while ($true) {
     for ($i = 0; $i -lt $activeProjects.Count; $i++) {
         $project = $activeProjects[$i]
         $menuNumber = $i + 1
-        Write-Host "$menuNumber. $(Get-Label -Project $project)"
-        Write-Host "   $($project.path)"
+        $repoStatus = if (Test-IsGitRepo -Path $project.path) { "git repo" } else { "folder only" }
+        Write-Host ("{0,2}. {1}" -f $menuNumber, (Get-Label -Project $project)) -ForegroundColor White
+        Write-Host ("    {0}" -f $project.path) -ForegroundColor DarkGray
+        Write-Host ("    status: {0}" -f $repoStatus) -ForegroundColor DarkCyan
     }
 
     Write-Host ""
-    Write-Host "R. Resume last"
-    Write-Host "C. Open command library"
-    Write-Host "H. Open CODEX root"
-    Write-Host "0. Exit"
+    Write-Host "R. Resume last project" -ForegroundColor Cyan
+    Write-Host "J. Open from recent projects" -ForegroundColor Cyan
+    Write-Host "T. Quick-open CURRENT_TASK.md" -ForegroundColor Cyan
+    Write-Host "S. Create snapshot handoff" -ForegroundColor Cyan
+    Write-Host "C. Open command library" -ForegroundColor Cyan
+    Write-Host "H. Open CODEX root" -ForegroundColor Cyan
+    Write-Host "0. Exit" -ForegroundColor Cyan
     Write-Host ""
 
     $rawSelection = Read-Host "Select an option"
@@ -281,6 +483,24 @@ while ($true) {
         '^0$' { break }
         '^[Rr]$' {
             Resume-Last
+            continue
+        }
+        '^[Jj]$' {
+            Show-RecentProjectsMenu
+            continue
+        }
+        '^[Tt]$' {
+            $project = Pick-Project -Projects $activeProjects -Title "Quick-Open CURRENT_TASK.md"
+            if ($null -ne $project) {
+                Open-CurrentTaskQuick -Project $project
+            }
+            continue
+        }
+        '^[Ss]$' {
+            $project = Pick-Project -Projects $activeProjects -Title "Create Snapshot Handoff"
+            if ($null -ne $project) {
+                New-SnapshotHandoff -Project $project
+            }
             continue
         }
         '^[Cc]$' {
