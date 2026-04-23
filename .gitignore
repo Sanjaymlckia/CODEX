@@ -1,2 +1,4 @@
 state/last_project.txt
 state/recent_projects.json
+CURRENT_CONTEXT.txt
+state/*_snapshot.json
