@@ -1,34 +1,65 @@
-﻿[
+[
+  {
+    "name": "FODE_RUNTIME",
+    "display_name": "FODE Runtime",
+    "status": "active",
+    "path": "C:\\CODEX_PROJECTS\\FODE_RUNTIME",
+    "type": "apps_script",
+    "startup_context": "CIS only. Strict release discipline. Canonical URL rules apply.",
+    "notes": "Office canonical path replaces prior mixed baseline references."
+  },
   {
     "name": "CODEX_FORMS",
+    "display_name": "Forms",
     "status": "active",
-    "path": "D:\\CODEX_PROJECTS\\CODEX_FORMS",
+    "path": "C:\\CODEX_PROJECTS\\CODEX_FORMS",
     "type": "forms",
     "startup_context": "Forms workspace. Do not overwrite templates. Prefer field fill over overlay.",
     "notes": ""
   },
   {
-    "name": "DHERST_AUDIT",
+    "name": "DHERST_Audit_Review",
+    "display_name": "DHERST",
     "status": "active",
-    "path": "C:\\Codex_DHERST\\DHERST_Audit_Review",
+    "path": "C:\\CODEX_PROJECTS\\DHERST_Audit_Review",
     "type": "document_audit",
     "startup_context": "DHERST audit mode. Controlled edits only when instructed.",
-    "notes": ""
-  },
-  {
-    "name": "FODE_RUNTIME",
-    "status": "active",
-    "path": "C:\\Clasp\\FODE_Downstream_Runtime",
-    "type": "apps_script",
-    "startup_context": "CIS only. Strict release discipline. Canonical URL rules apply.",
-    "notes": ""
+    "notes": "Uses office canonical folder name."
   },
   {
     "name": "ZOHO_CRM",
+    "display_name": "Zoho CRM",
     "status": "active",
-    "path": "D:\\CODEX\\projects\\ZOHO_CRM",
+    "path": "C:\\CODEX_PROJECTS\\ZOHO_CRM",
     "type": "crm",
     "startup_context": "Zoho CRM workspace. No live CRM changes. Preserve imports and avoid guessed field mappings.",
-    "notes": "Friendly label: Zoho CRM"
+    "notes": "Imported GitHub CRM starter context into office workspace."
+  },
+  {
+    "name": "MLC_MARKETING",
+    "display_name": "Marketing",
+    "status": "active",
+    "path": "C:\\CODEX_PROJECTS\\MLC_MARKETING",
+    "type": "marketing",
+    "startup_context": "Marketing workspace. Preserve campaign assets and prefer additive edits over rewrites.",
+    "notes": ""
+  },
+  {
+    "name": "CAR_PRADO",
+    "display_name": "Prado",
+    "status": "active",
+    "path": "C:\\CODEX_PROJECTS\\CAR_PRADO",
+    "type": "operations",
+    "startup_context": "Vehicle operations workspace. Preserve source documents and record assumptions explicitly.",
+    "notes": ""
+  },
+  {
+    "name": "GENERAL_LAB",
+    "display_name": "Sandbox Lab",
+    "status": "active",
+    "path": "C:\\CODEX_PROJECTS\\GENERAL_LAB",
+    "type": "sandbox",
+    "startup_context": "General lab workspace for low-risk experiments and temporary prototypes.",
+    "notes": ""
   }
 ]

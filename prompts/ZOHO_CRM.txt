@@ -1,0 +1,5 @@
+ZOHO_CRM mode.
+Zoho CRM workspace. No live CRM changes. Preserve imports and avoid guessed field mappings.
+Prefer inventory, mapping, and rule clarification before any mutation work.
+Follow any project instructions in AGENTS.md before making changes.
+Before execution, print the current working directory and the files in scope. If the workspace is not C:\CODEX_PROJECTS\ZOHO_CRM, stop.
