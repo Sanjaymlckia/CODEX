@@ -1,28 +1,26 @@
 # COMMAND LIBRARY
 
-Canonical hub root: `C:\CODEX`
+Canonical hub root on this machine: `D:\CODEX`
 
 Primary launch command:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\CODEX\RUN.ps1
+powershell -ExecutionPolicy Bypass -File D:\CODEX\RUN.ps1
 ```
 
 Useful paths:
 
-- Hub: `C:\CODEX`
-- Projects: `C:\CODEX_PROJECTS`
-- Archive: `C:\CODEX_ARCHIVE`
-- Temp: `C:\CODEX_TEMP`
-- Registry: `C:\CODEX\projects\projects.json`
-- Prompts: `C:\CODEX\prompts`
+- Hub: `D:\CODEX`
+- Projects: `D:\CODEX_PROJECTS`
+- Registry: `D:\CODEX\projects\projects.json`
+- Prompts: `D:\CODEX\prompts`
 
 Quick checks:
 
 ```powershell
-Get-ChildItem C:\CODEX_PROJECTS
-Get-Content C:\CODEX\projects\projects.json
-Get-Content C:\CODEX_PROJECTS\ZOHO_CRM\CURRENT_TASK.md
+Get-ChildItem D:\CODEX_PROJECTS
+Get-Content D:\CODEX\projects\projects.json
+Get-Content D:\CODEX_PROJECTS\CODEX_CRM\CURRENT_TASK.md
 ```
 
 Project discipline:

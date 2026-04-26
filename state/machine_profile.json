@@ -1,0 +1,19 @@
+{
+  "active_machine": "SVAIDYA",
+  "machines": {
+    "SVAIDYA": {
+      "preferred_root": "D:\\CODEX_PROJECTS"
+    },
+    "HOME": {
+      "preferred_root": "D:\\CODEX_PROJECTS"
+    },
+    "OFFICE": {
+      "preferred_root": "C:\\CODEX_PROJECTS"
+    }
+  },
+  "fallback_roots": [
+    "D:\\CODEX_PROJECTS",
+    "C:\\CODEX_PROJECTS",
+    "E:\\CODEX_PROJECTS"
+  ]
+}

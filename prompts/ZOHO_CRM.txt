@@ -2,4 +2,18 @@ ZOHO_CRM mode.
 Zoho CRM workspace. No live CRM changes. Preserve imports and avoid guessed field mappings.
 Prefer inventory, mapping, and rule clarification before any mutation work.
 Follow any project instructions in AGENTS.md before making changes.
-Before execution, print the current working directory and the files in scope. If the workspace is not C:\CODEX_PROJECTS\ZOHO_CRM, stop.
+
+Before execution, print:
+Current working directory: <path>
+Workspace validation: PASS / FAIL
+Files in scope: <enumerated>
+
+Valid workspace if ALL are true:
+- current folder name is CODEX_CRM
+- parent folder name is CODEX_PROJECTS
+- drive is C:, D:, or E:
+
+If workspace validation fails, stop with:
+Invalid workspace.
+Expected:
+<Drive>:\CODEX_PROJECTS\CODEX_CRM

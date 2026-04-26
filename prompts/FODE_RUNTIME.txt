@@ -2,4 +2,19 @@ FODE runtime mode.
 CIS only. Strict release discipline. Canonical URL rules apply.
 Do not modify unrelated files.
 Follow any project instructions in AGENTS.md before making changes.
-Before execution, print the repo root, git status -sb, and scoped files before any change. If the workspace is not C:\CODEX_PROJECTS\FODE_RUNTIME, stop.
+
+Before execution, print:
+Repo root: <path>
+Workspace validation: PASS / FAIL
+git status -sb
+Files in scope: <enumerated>
+
+Valid workspace if ALL are true:
+- current folder name is FODE_Runtime or FODE_RUNTIME
+- parent folder name is CODEX_PROJECTS
+- drive is C:, D:, or E:
+
+If workspace validation fails, stop with:
+Invalid workspace.
+Expected:
+<Drive>:\CODEX_PROJECTS\FODE_Runtime

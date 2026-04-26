@@ -126,18 +126,18 @@ function Set-LastProjectName {
 function Get-MachineProfile {
     $profilePath = Get-MachineProfilePath
     if (-not (Test-Path -LiteralPath $profilePath)) {
-        return New-DefaultMachineProfile
+        return $null
     }
 
     try {
         $raw = Get-Content -LiteralPath $profilePath -Raw -Encoding utf8
         if ([string]::IsNullOrWhiteSpace($raw)) {
-            return New-DefaultMachineProfile
+            return $null
         }
 
         return $raw | ConvertFrom-Json -ErrorAction Stop
     } catch {
-        return New-DefaultMachineProfile
+        return $null
     }
 }
 
@@ -150,51 +150,7 @@ function Save-MachineProfile {
 
     $profilePath = Get-MachineProfilePath
     Ensure-ParentDirectory -Path $profilePath
-    $Profile | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $profilePath -Encoding utf8
-}
-
-function Get-MachineName {
-    if (-not [string]::IsNullOrWhiteSpace($env:COMPUTERNAME)) {
-        return $env:COMPUTERNAME.Trim().ToUpperInvariant()
-    }
-
-    return [System.Environment]::MachineName.Trim().ToUpperInvariant()
-}
-
-function New-DefaultMachineProfile {
-    $machineName = Get-MachineName
-    $defaultPreferredRoot = if (Test-Path -LiteralPath "D:\CODEX_PROJECTS") { "D:\CODEX_PROJECTS" } else { "C:\CODEX_PROJECTS" }
-
-    return [pscustomobject]@{
-        active_machine = $machineName
-        machines = [pscustomobject]@{
-            $machineName = [pscustomobject]@{
-                preferred_root = $defaultPreferredRoot
-            }
-            HOME = [pscustomobject]@{
-                preferred_root = "D:\CODEX_PROJECTS"
-            }
-            OFFICE = [pscustomobject]@{
-                preferred_root = "C:\CODEX_PROJECTS"
-            }
-        }
-        fallback_roots = @(
-            "D:\CODEX_PROJECTS",
-            "C:\CODEX_PROJECTS",
-            "E:\CODEX_PROJECTS"
-        )
-    }
-}
-
-function Get-ProfileMachineEntry {
-    param([object]$Profile)
-
-    $machineName = Get-MachineName
-    if ($null -ne $Profile.machines -and $null -ne $Profile.machines.PSObject.Properties[$machineName]) {
-        return $Profile.machines.PSObject.Properties[$machineName].Value
-    }
-
-    return $null
+    $Profile | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $profilePath -Encoding utf8
 }
 
 function Get-PreferredProjectRoot {
@@ -203,22 +159,11 @@ function Get-PreferredProjectRoot {
         return ""
     }
 
-    $machine = Get-ProfileMachineEntry -Profile $profile
-    if ($null -ne $machine -and $null -ne $machine.PSObject.Properties["preferred_root"]) {
-        $preferredRoot = [string]$machine.preferred_root
-        if (-not [string]::IsNullOrWhiteSpace($preferredRoot)) {
-            return $preferredRoot.Trim()
-        }
+    if ($null -eq $profile.PSObject.Properties["preferred_project_root"]) {
+        return ""
     }
 
-    if ($null -ne $profile.PSObject.Properties["preferred_project_root"]) {
-        $preferredRoot = [string]$profile.preferred_project_root
-        if (-not [string]::IsNullOrWhiteSpace($preferredRoot)) {
-            return $preferredRoot.Trim()
-        }
-    }
-
-    return ""
+    return [string]$profile.preferred_project_root
 }
 
 function Set-PreferredProjectRoot {
@@ -228,29 +173,9 @@ function Set-PreferredProjectRoot {
         return
     }
 
-    $profile = Get-MachineProfile
-    $machineName = Get-MachineName
-    if ($null -eq $profile.PSObject.Properties["machines"]) {
-        $profile | Add-Member -MemberType NoteProperty -Name "machines" -Value ([pscustomobject]@{})
-    }
-
-    if ($null -eq $profile.machines.PSObject.Properties[$machineName]) {
-        $profile.machines | Add-Member -MemberType NoteProperty -Name $machineName -Value ([pscustomobject]@{ preferred_root = $RootPath })
-    } else {
-        $profile.machines.PSObject.Properties[$machineName].Value.preferred_root = $RootPath
-    }
-
-    if ($null -eq $profile.PSObject.Properties["active_machine"]) {
-        $profile | Add-Member -MemberType NoteProperty -Name "active_machine" -Value $machineName
-    } else {
-        $profile.active_machine = $machineName
-    }
-
-    if ($null -eq $profile.PSObject.Properties["fallback_roots"]) {
-        $profile | Add-Member -MemberType NoteProperty -Name "fallback_roots" -Value @("D:\CODEX_PROJECTS", "C:\CODEX_PROJECTS", "E:\CODEX_PROJECTS")
-    }
-
-    Save-MachineProfile -Profile $profile
+    Save-MachineProfile -Profile ([pscustomobject]@{
+        preferred_project_root = $RootPath
+    })
 }
 
 function Load-RecentProjects {
@@ -404,38 +329,11 @@ function Get-CurrentTaskPath {
 }
 
 function Get-ConfiguredProjectRoots {
-    $profile = Get-MachineProfile
-    if ($null -ne $profile.PSObject.Properties["fallback_roots"]) {
-        return @($profile.fallback_roots | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    }
-
     return @(
         "D:\CODEX_PROJECTS",
         "C:\CODEX_PROJECTS",
         "E:\CODEX_PROJECTS"
     )
-}
-
-function Get-ProjectRelativePath {
-    param([string]$ConfiguredPath)
-
-    if ([string]::IsNullOrWhiteSpace($ConfiguredPath)) {
-        return ""
-    }
-
-    $trimmed = $ConfiguredPath.Trim()
-    foreach ($root in (Get-ConfiguredProjectRoots)) {
-        $rootPrefix = $root.TrimEnd("\")
-        if ([string]::Equals($trimmed, $rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-            return ""
-        }
-
-        if ($trimmed.StartsWith($rootPrefix + "\", [System.StringComparison]::OrdinalIgnoreCase)) {
-            return $trimmed.Substring($rootPrefix.Length + 1)
-        }
-    }
-
-    return ""
 }
 
 function Get-ActiveProjectRoot {
@@ -462,10 +360,10 @@ function Resolve-ProjectPath {
     }
 
     $configuredPath = $Project.path.Trim()
-    $relativePath = Get-ProjectRelativePath -ConfiguredPath $configuredPath
+    $folderName = Split-Path -Path $configuredPath -Leaf
     $activeRoot = Get-ActiveProjectRoot
-    if (-not [string]::IsNullOrWhiteSpace($activeRoot) -and -not [string]::IsNullOrWhiteSpace($relativePath)) {
-        $candidatePath = Join-Path -Path $activeRoot -ChildPath $relativePath
+    if (-not [string]::IsNullOrWhiteSpace($activeRoot) -and -not [string]::IsNullOrWhiteSpace($folderName)) {
+        $candidatePath = Join-Path -Path $activeRoot -ChildPath $folderName
         if (Test-Path -LiteralPath $candidatePath) {
             return $candidatePath
         }
@@ -567,14 +465,12 @@ function Show-Header {
     $archived = @(Get-ProjectsByStatus -Projects $reg -Status @("archived")).Count
     $last = Get-LastProjectName
     $recent = @(Load-RecentProjects)
-    $activeRoot = Get-ActiveProjectRoot
 
     Clear-Host
     Write-Host "=============================================" -ForegroundColor DarkCyan
     Write-Host "               CODEX HUB LAUNCHER            " -ForegroundColor Cyan
     Write-Host "=============================================" -ForegroundColor DarkCyan
     Write-Host (" Active: {0}   Deprecated: {1}   Archived: {2}" -f $active, $deprecated, $archived) -ForegroundColor Gray
-    Write-Host (" Active root: {0}" -f $activeRoot) -ForegroundColor DarkCyan
     if ($last) {
         Write-Host (" Last: {0}" -f $last) -ForegroundColor DarkGray
     }
@@ -669,30 +565,6 @@ if (Get-Command codex -ErrorAction SilentlyContinue) {
         "-ExecutionPolicy", "Bypass",
         "-Command", $bootstrap
     ) | Out-Null
-}
-
-function Open-ProjInCodexApp {
-    param([object]$Project)
-
-    if ($null -eq $Project) {
-        return
-    }
-
-    $projectPath = Resolve-ProjectPath -Project $Project
-    if (-not (Test-Path -LiteralPath $projectPath)) {
-        Write-Host ""
-        Write-Host "Missing path: $projectPath" -ForegroundColor Yellow
-        return
-    }
-
-    Write-Host ""
-    Write-Host ("Codex App project path: {0}" -f $projectPath) -ForegroundColor Cyan
-    if (Get-Command codex -ErrorAction SilentlyContinue) {
-        & codex app $projectPath
-        Write-Host ("If Codex Desktop did not open this workspace automatically, open it manually with: {0}" -f $projectPath) -ForegroundColor Yellow
-    } else {
-        Write-Host "codex CLI not found in PATH. Open Codex Desktop manually and use this project path." -ForegroundColor Yellow
-    }
 }
 
 function Pick-Project {
@@ -793,15 +665,6 @@ function Show-RecentProjectsMenu {
     }
 }
 
-function Show-CodexAppProjectsMenu {
-    $reg = @(Load-Reg)
-    $activeProjects = @(Get-ProjectsByStatus -Projects $reg -Status @("active"))
-    $selected = Pick-Project -Projects $activeProjects -Title "Open in Codex App"
-    if ($null -ne $selected) {
-        Open-ProjInCodexApp -Project $selected
-    }
-}
-
 function New-SnapshotHandoff {
     param([object]$Project)
 
@@ -859,7 +722,6 @@ while ($true) {
     Write-Host "J. Open from recent projects" -ForegroundColor Cyan
     Write-Host "T. Quick-open CURRENT_TASK.md" -ForegroundColor Cyan
     Write-Host "S. Create snapshot handoff" -ForegroundColor Cyan
-    Write-Host "A. Open in Codex App" -ForegroundColor Cyan
     Write-Host "C. Open command library" -ForegroundColor Cyan
     Write-Host "H. Open CODEX root" -ForegroundColor Cyan
     Write-Host "V. Initialize CODEX LITE OPS files" -ForegroundColor Cyan
@@ -898,10 +760,6 @@ while ($true) {
             if ($null -ne $project) {
                 New-SnapshotHandoff -Project $project
             }
-            continue
-        }
-        '^[Aa]$' {
-            Show-CodexAppProjectsMenu
             continue
         }
         '^[Cc]$' {

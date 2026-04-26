@@ -2,4 +2,26 @@ DHERST audit mode.
 Allowed: read .docx, audit links, controlled edits only when instructed.
 Forbidden: switching directories, touching unrelated repos, unrelated file edits.
 Follow any project instructions in AGENTS.md before making changes.
-Before execution, print the current working directory and the files in scope. If the workspace is not C:\CODEX_PROJECTS\DHERST_Audit_Review, stop.
+
+Before execution, print:
+Current working directory: <path>
+Workspace validation: PASS / FAIL
+Files in scope: <enumerated>
+
+Valid workspace if ALL are true:
+- current folder name is DHERST_Audit_Review
+- parent folder name is CODEX_PROJECTS
+- drive is C:, D:, or E:
+
+Accepted examples:
+C:\CODEX_PROJECTS\DHERST_Audit_Review
+D:\CODEX_PROJECTS\DHERST_Audit_Review
+E:\CODEX_PROJECTS\DHERST_Audit_Review
+
+If workspace validation fails, stop with:
+Invalid workspace.
+Expected:
+<Drive>:\CODEX_PROJECTS\DHERST_Audit_Review
+
+Never hardcode drive letters in harness governance. Validate by project identity:
+<ProjectRoot>\CODEX_PROJECTS\<ProjectName>

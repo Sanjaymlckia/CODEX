@@ -30,10 +30,10 @@
     "name": "ZOHO_CRM",
     "display_name": "Zoho CRM",
     "status": "active",
-    "path": "C:\\CODEX_PROJECTS\\ZOHO_CRM",
+    "path": "C:\\CODEX_PROJECTS\\CODEX_CRM",
     "type": "crm",
     "startup_context": "Zoho CRM workspace. No live CRM changes. Preserve imports and avoid guessed field mappings.",
-    "notes": "Imported GitHub CRM starter context into office workspace."
+    "notes": "Home machine folder is CODEX_CRM; menu label remains Zoho CRM."
   },
   {
     "name": "MLC_MARKETING",
