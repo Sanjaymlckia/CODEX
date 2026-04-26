@@ -15,6 +15,7 @@
   - Updated Zoho CRM registry path to resolve to existing `D:\CODEX_PROJECTS\CODEX_CRM`.
   - Added separate `A. Open in Codex App` launcher action without changing numbered PowerShell launch behavior.
   - Updated hub startup prompts to use machine-aware workspace identity checks instead of C-only checks.
+  - Replaced active hub README and command notes with concise portable dual-machine documentation.
 - Notes:
   - Live machine currently resolves projects from `D:\CODEX_PROJECTS`.
   - Registry audit mismatch fixed: `ZOHO_CRM` menu entry now points at folder `CODEX_CRM`.
@@ -22,3 +23,4 @@
   - Registry audit missing folders reported but not moved/renamed: `MLC_MARKETING`, `CAR_PRADO`, `GENERAL_LAB`.
   - `codex app <projectPath>` on this Windows machine prints `Opening Codex Desktop...` and instructs the user to open the workspace path; launcher therefore also prints the exact resolved path.
   - Live `RUN.ps1` backup created at `D:\CODEX\RUN.ps1.bak_20260426_175614`.
+  - Active documentation is now `README.md` plus `COMMAND_LIBRARY.md`; use git history for older machine-specific notes.

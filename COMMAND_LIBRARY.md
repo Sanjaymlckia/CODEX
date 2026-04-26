@@ -1,31 +1,50 @@
 # COMMAND LIBRARY
 
-Canonical hub root on this machine: `D:\CODEX`
+Portable CODEX Hub commands. Run these from the active hub root.
 
-Primary launch command:
+## Launch
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File D:\CODEX\RUN.ps1
+powershell -ExecutionPolicy Bypass -File .\RUN.ps1
 ```
 
-Useful paths:
+Known hub roots:
+
+- `D:\CODEX`
+- `C:\CODEX`
+
+## Active Paths
+
+Current live machine:
 
 - Hub: `D:\CODEX`
 - Projects: `D:\CODEX_PROJECTS`
 - Registry: `D:\CODEX\projects\projects.json`
 - Prompts: `D:\CODEX\prompts`
 
-Quick checks:
+Alternate machine root:
+
+- Hub: `C:\CODEX`
+- Projects: `C:\CODEX_PROJECTS`
+
+## Quick Checks
+
+```powershell
+Get-Content .\CURRENT_TASK.md
+Get-Content .\projects\projects.json
+Get-Content .\state\machine_profile.json
+```
+
+Check resolved project folders on the live machine:
 
 ```powershell
 Get-ChildItem D:\CODEX_PROJECTS
-Get-Content D:\CODEX\projects\projects.json
 Get-Content D:\CODEX_PROJECTS\CODEX_CRM\CURRENT_TASK.md
 ```
 
-Project discipline:
+## Notes
 
-- Read `CURRENT_TASK.md` before making changes.
-- Update `CURRENT_TASK.md` before closing a work session.
-- Keep long-form project notes in `NOTES.md`.
-- Preserve imports, exports, and evidence files.
+- Keep one active README: `README.md`.
+- Use git history for rollback and older hub notes.
+- Project paths should resolve as active root plus project folder name before falling back to registry paths.
+- Read `CURRENT_TASK.md` before work and update it before ending a major session.
