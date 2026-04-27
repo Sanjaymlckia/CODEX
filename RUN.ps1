@@ -282,7 +282,8 @@ function Save-RecentProjects {
 
     $recentPath = Get-RecentPath
     Ensure-ParentDirectory -Path $recentPath
-    @($Items) | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $recentPath -Encoding utf8
+    $json = @($Items) | ConvertTo-Json -Depth 4
+    Set-Content -LiteralPath $recentPath -Value $json -Encoding utf8
 }
 
 function Add-RecentProject {
