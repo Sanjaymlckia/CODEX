@@ -26,3 +26,10 @@
   - Live `RUN.ps1` backup created at `D:\CODEX\RUN.ps1.bak_20260426_175614`.
   - Active documentation is now `README.md` plus `COMMAND_LIBRARY.md`; use git history for older machine-specific notes.
   - Zoho CRM aliases are tried in resolver order `CODEX_CRM`, then `ZOHO_CRM`; the first existing folder under the active root is used.
+- Zoho split session update (2026-04-27):
+  - Preserved existing CODEX_CRM as the legacy/archive Zoho workspace.
+  - Registered ZOHO_BOOKS_KIA_FODE, ZOHO_BOOKS_MLC, and ZOHO_CRM_INSTITUTIONAL in projects\projects.json.
+  - Created restart-safe project folders under D:\CODEX_PROJECTS with CURRENT_TASK.md and AGENTS.md.
+  - Did not create ZOHO_CRM_FODE; FODE CRM remains in the existing FODE project.
+  - Did not move/delete existing files, modify Zoho data files, run imports, or touch live Zoho.
+  - Launcher verification: active root D:\CODEX_PROJECTS; new entries resolve to folders 8, 9, and 10.

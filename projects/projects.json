@@ -61,5 +61,32 @@
     "type": "sandbox",
     "startup_context": "General lab workspace for low-risk experiments and temporary prototypes.",
     "notes": ""
+  },
+  {
+    "name": "ZOHO_BOOKS_KIA_FODE",
+    "display_name": "Zoho Books KIA/FODE",
+    "status": "active",
+    "path": "D:\\CODEX_PROJECTS\\ZOHO_BOOKS_KIA_FODE",
+    "type": "zoho_books",
+    "startup_context": "KIA/FODE Zoho Books finance operations. Contact cleanup, invoice/customer naming, student codes, and item classification. No live Zoho changes unless explicitly instructed.",
+    "notes": "Split from legacy CODEX_CRM mixed Zoho workspace."
+  },
+  {
+    "name": "ZOHO_BOOKS_MLC",
+    "display_name": "Zoho Books MLC",
+    "status": "active",
+    "path": "D:\\CODEX_PROJECTS\\ZOHO_BOOKS_MLC",
+    "type": "zoho_books",
+    "startup_context": "MLC Zoho Books accounting and finance setup. Contacts, items, invoices, and reporting. No live Zoho changes unless explicitly instructed.",
+    "notes": "Separate Books workspace; keep CRM work out."
+  },
+  {
+    "name": "ZOHO_CRM_INSTITUTIONAL",
+    "display_name": "Zoho CRM Institutional",
+    "status": "active",
+    "path": "D:\\CODEX_PROJECTS\\ZOHO_CRM_INSTITUTIONAL",
+    "type": "crm",
+    "startup_context": "MLC institutional/corporate CRM pipeline. Corporate clients, accounts, deals, and intelligence records. No live Zoho changes unless explicitly instructed.",
+    "notes": "Institutional CRM only; FODE CRM remains in the existing FODE project."
   }
 ]
