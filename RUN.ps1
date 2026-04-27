@@ -397,6 +397,18 @@ function Normalize-ProjectKey {
     return (($Value -replace '[^A-Za-z0-9]', '').Trim().ToUpperInvariant())
 }
 
+function Test-IsZohoCrmProject {
+    param([object]$Project)
+
+    if ($null -eq $Project) {
+        return $false
+    }
+
+    $nameKey = Normalize-ProjectKey -Value $Project.name
+    $labelKey = Normalize-ProjectKey -Value (Get-Label -Project $Project)
+    return ($nameKey -eq "ZOHOCRM" -or $labelKey -eq "ZOHOCRM")
+}
+
 function Get-CurrentTaskPath {
     param([object]$Project)
 
@@ -466,6 +478,15 @@ function Resolve-ProjectPath {
     $relativePath = Get-ProjectRelativePath -ConfiguredPath $configuredPath
     $activeRoot = Get-ActiveProjectRoot
     if (-not [string]::IsNullOrWhiteSpace($activeRoot) -and -not [string]::IsNullOrWhiteSpace($relativePath)) {
+        if (Test-IsZohoCrmProject -Project $Project) {
+            foreach ($alias in @("CODEX_CRM", "ZOHO_CRM")) {
+                $aliasPath = Join-Path -Path $activeRoot -ChildPath $alias
+                if (Test-Path -LiteralPath $aliasPath) {
+                    return $aliasPath
+                }
+            }
+        }
+
         $candidatePath = Join-Path -Path $activeRoot -ChildPath $relativePath
         if (Test-Path -LiteralPath $candidatePath) {
             return $candidatePath

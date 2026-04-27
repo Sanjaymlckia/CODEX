@@ -16,6 +16,7 @@
   - Added separate `A. Open in Codex App` launcher action without changing numbered PowerShell launch behavior.
   - Updated hub startup prompts to use machine-aware workspace identity checks instead of C-only checks.
   - Replaced active hub README and command notes with concise portable dual-machine documentation.
+  - Added Zoho CRM folder alias resolution so home can use `CODEX_CRM` and office can use `ZOHO_CRM` under the active project root.
 - Notes:
   - Live machine currently resolves projects from `D:\CODEX_PROJECTS`.
   - Registry audit mismatch fixed: `ZOHO_CRM` menu entry now points at folder `CODEX_CRM`.
@@ -24,3 +25,4 @@
   - `codex app <projectPath>` on this Windows machine prints `Opening Codex Desktop...` and instructs the user to open the workspace path; launcher therefore also prints the exact resolved path.
   - Live `RUN.ps1` backup created at `D:\CODEX\RUN.ps1.bak_20260426_175614`.
   - Active documentation is now `README.md` plus `COMMAND_LIBRARY.md`; use git history for older machine-specific notes.
+  - Zoho CRM aliases are tried in resolver order `CODEX_CRM`, then `ZOHO_CRM`; the first existing folder under the active root is used.
