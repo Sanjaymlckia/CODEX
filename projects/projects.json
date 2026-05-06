@@ -1,92 +1,92 @@
-[
-  {
-    "name": "FODE_RUNTIME",
-    "display_name": "FODE Runtime",
-    "status": "active",
-    "path": "C:\\CODEX_PROJECTS\\FODE_RUNTIME",
-    "type": "apps_script",
-    "startup_context": "CIS only. Strict release discipline. Canonical URL rules apply.",
-    "notes": "Office canonical path replaces prior mixed baseline references."
-  },
-  {
-    "name": "CODEX_FORMS",
-    "display_name": "Forms",
-    "status": "active",
-    "path": "C:\\CODEX_PROJECTS\\CODEX_FORMS",
-    "type": "forms",
-    "startup_context": "Forms workspace. Do not overwrite templates. Prefer field fill over overlay.",
-    "notes": ""
-  },
-  {
-    "name": "DHERST_Audit_Review",
-    "display_name": "DHERST",
-    "status": "active",
-    "path": "C:\\CODEX_PROJECTS\\DHERST_Audit_Review",
-    "type": "document_audit",
-    "startup_context": "DHERST audit mode. Controlled edits only when instructed.",
-    "notes": "Uses office canonical folder name."
-  },
-  {
-    "name": "ZOHO_CRM",
-    "display_name": "Zoho CRM",
-    "status": "active",
-    "path": "C:\\CODEX_PROJECTS\\ZOHO_CRM",
-    "type": "crm",
-    "startup_context": "Zoho CRM workspace. No live CRM changes. Preserve imports and avoid guessed field mappings.",
-    "notes": "Home machine folder is CODEX_CRM; menu label remains Zoho CRM."
-  },
-  {
-    "name": "MLC_MARKETING",
-    "display_name": "Marketing",
-    "status": "active",
-    "path": "C:\\CODEX_PROJECTS\\MLC_MARKETING",
-    "type": "marketing",
-    "startup_context": "Marketing workspace. Preserve campaign assets and prefer additive edits over rewrites.",
-    "notes": ""
-  },
-  {
-    "name": "CAR_PRADO",
-    "display_name": "Prado",
-    "status": "active",
-    "path": "C:\\CODEX_PROJECTS\\CAR_PRADO",
-    "type": "operations",
-    "startup_context": "Vehicle operations workspace. Preserve source documents and record assumptions explicitly.",
-    "notes": ""
-  },
-  {
-    "name": "GENERAL_LAB",
-    "display_name": "Sandbox Lab",
-    "status": "active",
-    "path": "C:\\CODEX_PROJECTS\\GENERAL_LAB",
-    "type": "sandbox",
-    "startup_context": "General lab workspace for low-risk experiments and temporary prototypes.",
-    "notes": ""
-  },
-  {
-    "name": "ZOHO_BOOKS_KIA_FODE",
-    "display_name": "Zoho Books KIA/FODE",
-    "status": "active",
-    "path": "D:\\CODEX_PROJECTS\\ZOHO_BOOKS_KIA_FODE",
-    "type": "zoho_books",
-    "startup_context": "KIA/FODE Zoho Books finance operations. Contact cleanup, invoice/customer naming, student codes, and item classification. No live Zoho changes unless explicitly instructed.",
-    "notes": "Split from legacy CODEX_CRM mixed Zoho workspace."
-  },
-  {
-    "name": "ZOHO_BOOKS_MLC",
-    "display_name": "Zoho Books MLC",
-    "status": "active",
-    "path": "D:\\CODEX_PROJECTS\\ZOHO_BOOKS_MLC",
-    "type": "zoho_books",
-    "startup_context": "MLC Zoho Books accounting and finance setup. Contacts, items, invoices, and reporting. No live Zoho changes unless explicitly instructed.",
-    "notes": "Separate Books workspace; keep CRM work out."
-  },
-  {
-    "name": "ZOHO_CRM_INSTITUTIONAL",
-    "display_name": "Zoho CRM Institutional",
-    "status": "active",
-    "path": "D:\\CODEX_PROJECTS\\ZOHO_CRM_INSTITUTIONAL",
-    "type": "crm",
-    "startup_context": "MLC institutional/corporate CRM pipeline. Corporate clients, accounts, deals, and intelligence records. No live Zoho changes unless explicitly instructed.",
-    "notes": "Institutional CRM only; FODE CRM remains in the existing FODE project."
-  }
+﻿[
+    {
+        "name":  "FODE_RUNTIME",
+        "display_name":  "FODE Runtime",
+        "status":  "active",
+        "path":  "E:\\Gdrive\\01 SANJAY\\Codex_Sync\\FODE_Runtime_1wog",
+        "type":  "apps_script",
+        "startup_context":  "FODE runtime mode. CIS only. Strict release discipline. Canonical URL rules apply. Treat whoami as runtime truth.",
+        "notes":  "Verified authority: C:\\FODE_Runtime_1wog; GitHub Sanjaymlckia/FODE_Runtime_1wog; scriptId 1wogECIIksKIhrho6OeKXdt3f7nmrMjSSeFfXwlypa3o-Do3MECvKOI90."
+    },
+    {
+        "name":  "CODEX_FORMS",
+        "display_name":  "Forms",
+        "status":  "active",
+        "path":  "C:\\CODEX_PROJECTS\\CODEX_FORMS",
+        "type":  "forms",
+        "startup_context":  "Forms workspace. Do not overwrite templates. Prefer field fill over overlay.",
+        "notes":  ""
+    },
+    {
+        "name":  "DHERST_Audit_Review",
+        "display_name":  "DHERST",
+        "status":  "active",
+        "path":  "C:\\CODEX_PROJECTS\\DHERST_Audit_Review",
+        "type":  "document_audit",
+        "startup_context":  "DHERST audit mode. Controlled edits only when instructed.",
+        "notes":  "Uses office canonical folder name."
+    },
+    {
+        "name":  "ZOHO_CRM",
+        "display_name":  "Zoho CRM",
+        "status":  "active",
+        "path":  "C:\\CODEX_PROJECTS\\ZOHO_CRM",
+        "type":  "crm",
+        "startup_context":  "Zoho CRM workspace. No live CRM changes. Preserve imports and avoid guessed field mappings.",
+        "notes":  "Home machine folder is CODEX_CRM; menu label remains Zoho CRM."
+    },
+    {
+        "name":  "MLC_MARKETING",
+        "display_name":  "Marketing",
+        "status":  "active",
+        "path":  "C:\\CODEX_PROJECTS\\MLC_MARKETING",
+        "type":  "marketing",
+        "startup_context":  "Marketing workspace. Preserve campaign assets and prefer additive edits over rewrites.",
+        "notes":  ""
+    },
+    {
+        "name":  "CAR_PRADO",
+        "display_name":  "Prado",
+        "status":  "active",
+        "path":  "C:\\CODEX_PROJECTS\\CAR_PRADO",
+        "type":  "operations",
+        "startup_context":  "Vehicle operations workspace. Preserve source documents and record assumptions explicitly.",
+        "notes":  ""
+    },
+    {
+        "name":  "GENERAL_LAB",
+        "display_name":  "Sandbox Lab",
+        "status":  "active",
+        "path":  "C:\\CODEX_PROJECTS\\GENERAL_LAB",
+        "type":  "sandbox",
+        "startup_context":  "General lab workspace for low-risk experiments and temporary prototypes.",
+        "notes":  ""
+    },
+    {
+        "name":  "ZOHO_BOOKS_KIA_FODE",
+        "display_name":  "Zoho Books KIA/FODE",
+        "status":  "active",
+        "path":  "D:\\CODEX_PROJECTS\\ZOHO_BOOKS_KIA_FODE",
+        "type":  "zoho_books",
+        "startup_context":  "KIA/FODE Zoho Books finance operations. Contact cleanup, invoice/customer naming, student codes, and item classification. No live Zoho changes unless explicitly instructed.",
+        "notes":  "Split from legacy CODEX_CRM mixed Zoho workspace."
+    },
+    {
+        "name":  "ZOHO_BOOKS_MLC",
+        "display_name":  "Zoho Books MLC",
+        "status":  "active",
+        "path":  "D:\\CODEX_PROJECTS\\ZOHO_BOOKS_MLC",
+        "type":  "zoho_books",
+        "startup_context":  "MLC Zoho Books accounting and finance setup. Contacts, items, invoices, and reporting. No live Zoho changes unless explicitly instructed.",
+        "notes":  "Separate Books workspace; keep CRM work out."
+    },
+    {
+        "name":  "ZOHO_CRM_INSTITUTIONAL",
+        "display_name":  "Zoho CRM Institutional",
+        "status":  "active",
+        "path":  "D:\\CODEX_PROJECTS\\ZOHO_CRM_INSTITUTIONAL",
+        "type":  "crm",
+        "startup_context":  "MLC institutional/corporate CRM pipeline. Corporate clients, accounts, deals, and intelligence records. No live Zoho changes unless explicitly instructed.",
+        "notes":  "Institutional CRM only; FODE CRM remains in the existing FODE project."
+    }
 ]

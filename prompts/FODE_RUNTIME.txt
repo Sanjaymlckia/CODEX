@@ -1,20 +1,35 @@
-FODE runtime mode.
+﻿FODE runtime mode.
 CIS only. Strict release discipline. Canonical URL rules apply.
 Do not modify unrelated files.
-Follow any project instructions in AGENTS.md before making changes.
+Always read CURRENT_TASK.md first.
 
-Before execution, print:
-Repo root: <path>
-Workspace validation: PASS / FAIL
-git status -sb
-Files in scope: <enumerated>
+Authoritative local repo:
+C:\FODE_Runtime_1wog
 
-Valid workspace if ALL are true:
-- current folder name is FODE_Runtime or FODE_RUNTIME
-- parent folder name is CODEX_PROJECTS
-- drive is C:, D:, or E:
+GitHub repo:
+Sanjaymlckia/FODE_Runtime_1wog
 
-If workspace validation fails, stop with:
-Invalid workspace.
-Expected:
-<Drive>:\CODEX_PROJECTS\FODE_Runtime
+Script ID:
+1wogECIIksKIhrho6OeKXdt3f7nmrMjSSeFfXwlypa3o-Do3MECvKOI90
+
+Canonical URL invariant:
+https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec
+Never store or generate workspace-domain Apps Script URLs as canonical URLs.
+
+Canonical Admin URL:
+https://script.google.com/macros/s/AKfycbxkuj6ElPa8xE9WJnECcW9u_hGNPMpd79F5Vhxgur-p7MCpmDF2HaLFIgx7yTYRC8aZ/exec
+
+Canonical Student URL:
+https://script.google.com/macros/s/AKfycbxqTpEAJzk2NwFOumKTV0-bphasgPxM-kJHpbx5KobveYrhNtP5FbP0LJvL8kpA4PBv/exec
+
+Runtime verification:
+- whoami is primary runtime truth.
+- Admin whoami: append ?view=whoami to the canonical Admin URL.
+- Student whoami: append ?view=whoami to the canonical Student URL.
+- VERSION must equal "r" + DEPLOY_VERSION_NUMBER.
+- Admin and Student whoami must report the same runtime version before release acceptance.
+
+Release restrictions:
+- Do not run clasp push, clasp version, deploy, pin, git commit, git push, or tag unless explicitly instructed by CIS.
+- Do not edit Apps Script source, appsscript.json, or .clasp.json unless explicitly authorized.
+- Do not infer live runtime from local files.
