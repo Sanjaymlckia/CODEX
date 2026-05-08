@@ -38,3 +38,8 @@
   - Added DATA_GOVERNANCE to projects\projects.json with a C-root configured path so the machine-aware resolver can use `C:\CODEX_PROJECTS\DATA_GOVERNANCE` at office and `D:\CODEX_PROJECTS\DATA_GOVERNANCE` at home.
   - Corrected FODE registry notes: home authority is `E:\Gdrive\01 SANJAY\Codex_Sync\FODE_Runtime_1wog`; office should use `C:\CODEX_PROJECTS\FODE_Runtime_1wog` only if cloned there.
   - No FODE runtime source, clasp, deployment, trigger, or Apps Script runtime mutation was performed.
+- Machine-specific path override update (2026-05-08):
+  - RUN.ps1 resolves project paths in order: local `state\machine_profile.json` project override, shared registry path, active-root fallback, then missing-path report.
+  - Launcher menus now show resolved path source and warn when the configured registry path is missing on the current machine.
+  - Shared FODE registry path remains the home authority path; office FODE should be supplied by a local machine profile override, not by replacing the shared registry path.
+  - `state\machine_profile.json` is currently tracked; do not commit machine-specific local paths from it without an explicit tracking/ignore decision.

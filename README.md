@@ -21,23 +21,25 @@ Known hub roots:
 
 The launcher resolves active projects under the current machine's active project root.
 
-Root preference:
+Project path resolution:
 
-1. `state\machine_profile.json` machine-specific `preferred_root`
-2. Existing fallback roots in this order:
+1. `state\machine_profile.json` machine-specific `project_path_overrides[project.name]`, when present and existing
+2. `projects\projects.json` `path`, when existing
+3. Active project root fallback from `state\machine_profile.json` machine-specific `preferred_root`
+4. Existing fallback roots in this order:
    - `D:\CODEX_PROJECTS`
    - `C:\CODEX_PROJECTS`
    - `E:\CODEX_PROJECTS`
-3. A configured registry path, only as fallback
+5. Missing-path report with the configured and resolved paths visible
 
-Live machine note: this machine currently resolves projects from `D:\CODEX_PROJECTS`.
+The launcher menu prints each project name, resolved path, source (`override`, `default`, `fallback`, or `missing`), and warns when the configured registry path is absent on the current machine.
 
 ## Hub Files
 
 - `RUN.ps1` - registry-driven portable launcher
 - `projects\projects.json` - project registry and labels
 - `prompts\` - per-project startup prompts
-- `state\machine_profile.json` - machine-aware preferred project root
+- `state\machine_profile.json` - machine-aware preferred project root and optional local project path overrides
 - `state\last_project.txt` and `state\recent_projects.json` - launcher memory
 - `COMMAND_LIBRARY.md` - short command reference
 - `CURRENT_TASK.md` - current hub maintenance objective

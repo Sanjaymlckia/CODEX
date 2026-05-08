@@ -221,6 +221,35 @@ function Get-PreferredProjectRoot {
     return ""
 }
 
+function Get-ProjectPathOverride {
+    param([object]$Project)
+
+    if ($null -eq $Project -or [string]::IsNullOrWhiteSpace($Project.name)) {
+        return ""
+    }
+
+    $profile = Get-MachineProfile
+    if ($null -eq $profile) {
+        return ""
+    }
+
+    $machine = Get-ProfileMachineEntry -Profile $profile
+    foreach ($container in @($machine, $profile)) {
+        if (
+            $null -ne $container -and
+            $null -ne $container.PSObject.Properties["project_path_overrides"] -and
+            $null -ne $container.project_path_overrides.PSObject.Properties[$Project.name]
+        ) {
+            $overridePath = [string]$container.project_path_overrides.PSObject.Properties[$Project.name].Value
+            if (-not [string]::IsNullOrWhiteSpace($overridePath)) {
+                return $overridePath.Trim()
+            }
+        }
+    }
+
+    return ""
+}
+
 function Set-PreferredProjectRoot {
     param([string]$RootPath)
 
@@ -470,11 +499,45 @@ function Get-ActiveProjectRoot {
 function Resolve-ProjectPath {
     param([object]$Project)
 
+    return (Resolve-ProjectPathInfo -Project $Project).Path
+}
+
+function Resolve-ProjectPathInfo {
+    param([object]$Project)
+
     if ($null -eq $Project -or [string]::IsNullOrWhiteSpace($Project.path)) {
-        return ""
+        return [pscustomobject]@{
+            Path              = ""
+            Source            = "missing"
+            ConfiguredPath    = ""
+            OverridePath      = ""
+            ConfiguredMissing = $false
+        }
     }
 
     $configuredPath = $Project.path.Trim()
+    $configuredMissing = -not (Test-Path -LiteralPath $configuredPath)
+    $overridePath = Get-ProjectPathOverride -Project $Project
+    if (-not [string]::IsNullOrWhiteSpace($overridePath) -and (Test-Path -LiteralPath $overridePath)) {
+        return [pscustomobject]@{
+            Path              = $overridePath
+            Source            = "override"
+            ConfiguredPath    = $configuredPath
+            OverridePath      = $overridePath
+            ConfiguredMissing = $configuredMissing
+        }
+    }
+
+    if (Test-Path -LiteralPath $configuredPath) {
+        return [pscustomobject]@{
+            Path              = $configuredPath
+            Source            = "default"
+            ConfiguredPath    = $configuredPath
+            OverridePath      = $overridePath
+            ConfiguredMissing = $false
+        }
+    }
+
     $relativePath = Get-ProjectRelativePath -ConfiguredPath $configuredPath
     $activeRoot = Get-ActiveProjectRoot
     if (-not [string]::IsNullOrWhiteSpace($activeRoot) -and -not [string]::IsNullOrWhiteSpace($relativePath)) {
@@ -482,36 +545,59 @@ function Resolve-ProjectPath {
             foreach ($alias in @("CODEX_CRM", "ZOHO_CRM")) {
                 $aliasPath = Join-Path -Path $activeRoot -ChildPath $alias
                 if (Test-Path -LiteralPath $aliasPath) {
-                    return $aliasPath
+                    return [pscustomobject]@{
+                        Path              = $aliasPath
+                        Source            = "fallback"
+                        ConfiguredPath    = $configuredPath
+                        OverridePath      = $overridePath
+                        ConfiguredMissing = $configuredMissing
+                    }
                 }
             }
         }
 
         $candidatePath = Join-Path -Path $activeRoot -ChildPath $relativePath
         if (Test-Path -LiteralPath $candidatePath) {
-            return $candidatePath
+            return [pscustomobject]@{
+                Path              = $candidatePath
+                Source            = "fallback"
+                ConfiguredPath    = $configuredPath
+                OverridePath      = $overridePath
+                ConfiguredMissing = $configuredMissing
+            }
         }
 
-        return $candidatePath
+        return [pscustomobject]@{
+            Path              = $candidatePath
+            Source            = "missing"
+            ConfiguredPath    = $configuredPath
+            OverridePath      = $overridePath
+            ConfiguredMissing = $configuredMissing
+        }
     }
 
-    if (Test-Path -LiteralPath $configuredPath) {
-        return $configuredPath
+    return [pscustomobject]@{
+        Path              = $configuredPath
+        Source            = "missing"
+        ConfiguredPath    = $configuredPath
+        OverridePath      = $overridePath
+        ConfiguredMissing = $configuredMissing
     }
-
-    return $configuredPath
 }
 
 function Resolve-ProjectLaunchContext {
     param([object]$Project)
 
-    $projectPath = Resolve-ProjectPath -Project $Project
+    $pathInfo = Resolve-ProjectPathInfo -Project $Project
+    $projectPath = $pathInfo.Path
     $activeRoot = Get-ActiveProjectRoot
 
     return [pscustomobject]@{
         ActiveProjectRoot = $activeRoot
         SelectedProject   = Get-Label -Project $Project
         ProjectPath       = $projectPath
+        PathSource        = $pathInfo.Source
+        ConfiguredMissing = $pathInfo.ConfiguredMissing
     }
 }
 
@@ -619,6 +705,7 @@ function Open-Proj {
     if (-not (Test-Path -LiteralPath $projectPath)) {
         Write-Host ""
         Write-Host "Missing path: $projectPath" -ForegroundColor Yellow
+        Write-Host ("Path source: {0}" -f $launchContext.PathSource) -ForegroundColor Yellow
         return
     }
 
@@ -647,6 +734,10 @@ Write-Host '=================================' -ForegroundColor DarkCyan
 Write-Host "Active project root: $($launchContext.ActiveProjectRoot)" -ForegroundColor DarkCyan
 Write-Host "Selected project: $($launchContext.SelectedProject)" -ForegroundColor DarkCyan
 Write-Host "Resolved project path: `$projectPath" -ForegroundColor DarkCyan
+Write-Host "Path source: $($launchContext.PathSource)" -ForegroundColor DarkCyan
+if ($($launchContext.ConfiguredMissing.ToString().ToLowerInvariant())) {
+    Write-Host 'Configured registry path is missing on this machine; resolved path used instead.' -ForegroundColor Yellow
+}
 Write-Host "Path: `$projectPath" -ForegroundColor Gray
 Write-Host "Context: `$startupContext" -ForegroundColor DarkGray
 Write-Host ''
@@ -700,15 +791,18 @@ function Open-ProjInCodexApp {
         return
     }
 
-    $projectPath = Resolve-ProjectPath -Project $Project
+    $pathInfo = Resolve-ProjectPathInfo -Project $Project
+    $projectPath = $pathInfo.Path
     if (-not (Test-Path -LiteralPath $projectPath)) {
         Write-Host ""
         Write-Host "Missing path: $projectPath" -ForegroundColor Yellow
+        Write-Host ("Path source: {0}" -f $pathInfo.Source) -ForegroundColor Yellow
         return
     }
 
     Write-Host ""
     Write-Host ("Codex App project path: {0}" -f $projectPath) -ForegroundColor Cyan
+    Write-Host ("Path source: {0}" -f $pathInfo.Source) -ForegroundColor DarkCyan
     if (Get-Command codex -ErrorAction SilentlyContinue) {
         & codex app $projectPath
         Write-Host ("If Codex Desktop did not open this workspace automatically, open it manually with: {0}" -f $projectPath) -ForegroundColor Yellow
@@ -735,10 +829,14 @@ function Pick-Project {
 
     for ($i = 0; $i -lt $items.Count; $i++) {
         $project = $items[$i]
-        $resolvedPath = Resolve-ProjectPath -Project $project
+        $pathInfo = Resolve-ProjectPathInfo -Project $project
+        $resolvedPath = $pathInfo.Path
         $repoStatus = if (Test-IsGitRepo -Path $resolvedPath) { "git" } else { "folder" }
         Write-Host ("{0,2}. {1}" -f ($i + 1), (Get-Label -Project $project)) -ForegroundColor White
-        Write-Host ("    {0} [{1}]" -f $resolvedPath, $repoStatus) -ForegroundColor DarkGray
+        Write-Host ("    {0} [{1}; source: {2}]" -f $resolvedPath, $repoStatus, $pathInfo.Source) -ForegroundColor DarkGray
+        if ($pathInfo.ConfiguredMissing) {
+            Write-Host ("    warning: configured path missing: {0}" -f $pathInfo.ConfiguredPath) -ForegroundColor Yellow
+        }
     }
 
     Write-Host ""
@@ -869,11 +967,15 @@ while ($true) {
     for ($i = 0; $i -lt $activeProjects.Count; $i++) {
         $project = $activeProjects[$i]
         $menuNumber = $i + 1
-        $resolvedPath = Resolve-ProjectPath -Project $project
+        $pathInfo = Resolve-ProjectPathInfo -Project $project
+        $resolvedPath = $pathInfo.Path
         $repoStatus = if (Test-IsGitRepo -Path $resolvedPath) { "git repo" } else { "folder only" }
         Write-Host ("{0,2}. {1}" -f $menuNumber, (Get-Label -Project $project)) -ForegroundColor White
         Write-Host ("    {0}" -f $resolvedPath) -ForegroundColor DarkGray
-        Write-Host ("    status: {0}" -f $repoStatus) -ForegroundColor DarkCyan
+        Write-Host ("    status: {0}; source: {1}" -f $repoStatus, $pathInfo.Source) -ForegroundColor DarkCyan
+        if ($pathInfo.ConfiguredMissing) {
+            Write-Host ("    warning: configured path missing: {0}" -f $pathInfo.ConfiguredPath) -ForegroundColor Yellow
+        }
     }
 
     Write-Host ""
