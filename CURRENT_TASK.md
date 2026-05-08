@@ -48,3 +48,10 @@
   - Add `templates\project_scaffold\` with default project guardrail files.
   - Add hub prompts for new project bootstrap, project shutdown check, and drift check.
   - Expose the governance prompts from `RUN.ps1` as read-only prompt viewers.
+- Governance hardening update (2026-05-08):
+  - Add root governance templates for New Project creation.
+  - Add read-only `tools\drift-audit.ps1` and operator-driven `tools\handoff.ps1`.
+  - Add `.codex\GLOBAL_RULES.md` and `.codex\RULE_STATUS.md` for visible rule inventory only.
+  - Add launcher commands: `N` New Project, `D` Drift Audit, `A` Audit selected project, `H` Handoff / Shutdown.
+  - Move Codex App launch to `X` and hub-root launch to `O`.
+  - Add lightweight branch, dirty state, handoff age, and health display to launcher project rows.

@@ -40,6 +40,10 @@ The launcher menu prints each project name, resolved path, source (`override`, `
 - `projects\projects.json` - project registry and labels
 - `prompts\` - per-project startup prompts
 - `templates\project_scaffold\` - default governance files for new projects
+- `templates\*.template.md` - automation-ready governance templates for the New Project flow
+- `tools\drift-audit.ps1` - read-only project drift audit
+- `tools\handoff.ps1` - operator-driven shutdown handoff writer
+- `.codex\` - visible rule inventory and status files
 - `state\machine_profile.json` - machine-aware preferred project root and optional local project path overrides
 - `state\last_project.txt` and `state\recent_projects.json` - launcher memory
 - `COMMAND_LIBRARY.md` - short command reference
@@ -48,16 +52,19 @@ The launcher menu prints each project name, resolved path, source (`override`, `
 ## Launcher Options
 
 - Number key - open the selected active project in PowerShell
+- `A` - audit a selected project
+- `D` - run drift audit for a selected project
+- `H` - run handoff/shutdown for a selected project
+- `N` - create a new project from governance templates
 - `R` - resume the last opened project
 - `J` - open from recent projects
 - `T` - quick-open a project's `CURRENT_TASK.md`
 - `S` - create a snapshot handoff file
-- `A` - open the selected project in Codex Desktop
+- `X` - open the selected project in Codex Desktop
 - `C` - open the command library
 - `B` - open the new project bootstrap prompt
-- `D` - open the drift check prompt
 - `P` - open the project shutdown check prompt
-- `H` - open the hub root
+- `O` - open the hub root
 - `V` - initialize CODEX LITE OPS files
 - `0` - exit
 
@@ -81,3 +88,11 @@ Operating pattern:
 5. Preserve source evidence, imports, exports, and generated outputs.
 
 New projects should start from `templates\project_scaffold\` so `CURRENT_TASK.md`, `AGENTS.md`, `README.md`, `RELEASE_LOG.md`, `DECISIONS.md`, `DRIFT_CHECK.md`, and `SHUTDOWN_CHECKLIST.md` exist from the first session.
+
+The `N` launcher flow uses root-level `templates\*.template.md` files and asks before git initialization, README creation, registry registration, or overwriting any existing governance file.
+
+Project health is intentionally simple:
+
+- `GREEN` means the path exists, `CURRENT_TASK.md` exists, optional guardrail docs are present, repo state is clean, and handoff is fresh.
+- `AMBER` means the path is usable but has stale handoff state, a dirty repo, or missing optional guardrail docs.
+- `RED` means the path is invalid, `CURRENT_TASK.md` is missing, or git is detached.

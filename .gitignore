@@ -4,3 +4,5 @@ CURRENT_CONTEXT.txt
 state/*_snapshot.json
 handoff/
 state/machine_profile.json
+
+state/handoffs/

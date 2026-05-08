@@ -29,6 +29,8 @@ function Get-RecentPath { Join-Path -Path (Get-StateRoot) -ChildPath "recent_pro
 function Get-PromptsRoot { Join-Path -Path (Get-Root) -ChildPath "prompts" }
 function Get-CommandLibraryPath { Join-Path -Path (Get-Root) -ChildPath "COMMAND_LIBRARY.md" }
 function Get-HubPromptPath { param([string]$FileName) Join-Path -Path (Get-PromptsRoot) -ChildPath $FileName }
+function Get-TemplatesRoot { Join-Path -Path (Get-Root) -ChildPath "templates" }
+function Get-ToolsRoot { Join-Path -Path (Get-Root) -ChildPath "tools" }
 
 function Get-PromptPath {
     param([string]$ProjectName)
@@ -314,6 +316,14 @@ function Save-RecentProjects {
     Ensure-ParentDirectory -Path $recentPath
     $json = @($Items) | ConvertTo-Json -Depth 4
     Set-Content -LiteralPath $recentPath -Value $json -Encoding utf8
+}
+
+function Save-Reg {
+    param([object[]]$Projects)
+
+    $regPath = Get-RegPath
+    Ensure-ParentDirectory -Path $regPath
+    @($Projects) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $regPath -Encoding utf8
 }
 
 function Add-RecentProject {
@@ -602,6 +612,207 @@ function Resolve-ProjectLaunchContext {
     }
 }
 
+function Get-ProjectGitSummary {
+    param([string]$ProjectPath)
+
+    if (-not (Test-IsGitRepo -Path $ProjectPath)) {
+        return [pscustomobject]@{
+            Branch = "no git"
+            DirtyCount = 0
+            State = "NO-GIT"
+            Detached = $false
+        }
+    }
+
+    $branch = (& git -C $ProjectPath rev-parse --abbrev-ref HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($branch)) {
+        $branch = "unknown"
+    }
+
+    $status = @(& git -C $ProjectPath status --porcelain 2>$null)
+    $dirtyCount = if ($LASTEXITCODE -eq 0) { $status.Count } else { 0 }
+    $detached = [string]::Equals($branch, "HEAD", [System.StringComparison]::OrdinalIgnoreCase)
+
+    return [pscustomobject]@{
+        Branch = $branch
+        DirtyCount = $dirtyCount
+        State = if ($dirtyCount -gt 0) { "DIRTY (+$dirtyCount)" } else { "CLEAN" }
+        Detached = $detached
+    }
+}
+
+function Get-LastHandoffInfo {
+    param(
+        [string]$ProjectPath,
+        [string]$ProjectName = ""
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ProjectPath) -or -not (Test-Path -LiteralPath $ProjectPath)) {
+        return [pscustomobject]@{ Text = "none"; Hours = 999999 }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ProjectName)) {
+        $safeProjectName = ($ProjectName -replace '[^A-Za-z0-9_.-]', '_').Trim('_')
+        $stateSnapshot = Join-Path -Path (Get-StateRoot) -ChildPath ("{0}_snapshot.json" -f $safeProjectName)
+        if (Test-Path -LiteralPath $stateSnapshot) {
+            $age = (Get-Date) - (Get-Item -LiteralPath $stateSnapshot).LastWriteTime
+            $text = if ($age.TotalHours -lt 1) {
+                "{0}m ago" -f [Math]::Max(1, [int]$age.TotalMinutes)
+            } elseif ($age.TotalHours -lt 48) {
+                "{0}h ago" -f [int]$age.TotalHours
+            } else {
+                "{0}d ago" -f [int]$age.TotalDays
+            }
+
+            return [pscustomobject]@{ Text = $text; Hours = $age.TotalHours }
+        }
+    }
+
+    $snapshotDir = Join-Path -Path $ProjectPath -ChildPath "SNAPSHOT"
+    if (-not (Test-Path -LiteralPath $snapshotDir)) {
+        return [pscustomobject]@{ Text = "none"; Hours = 999999 }
+    }
+
+    $latest = Get-ChildItem -LiteralPath $snapshotDir -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($null -eq $latest) {
+        return [pscustomobject]@{ Text = "none"; Hours = 999999 }
+    }
+
+    $age = (Get-Date) - $latest.LastWriteTime
+    $text = if ($age.TotalHours -lt 1) {
+        "{0}m ago" -f [Math]::Max(1, [int]$age.TotalMinutes)
+    } elseif ($age.TotalHours -lt 48) {
+        "{0}h ago" -f [int]$age.TotalHours
+    } else {
+        "{0}d ago" -f [int]$age.TotalDays
+    }
+
+    return [pscustomobject]@{ Text = $text; Hours = $age.TotalHours }
+}
+
+function Get-ProjectHealth {
+    param(
+        [object]$Project,
+        [object]$PathInfo,
+        [object]$GitSummary,
+        [object]$HandoffInfo
+    )
+
+    if ($null -eq $PathInfo -or [string]::IsNullOrWhiteSpace($PathInfo.Path) -or -not (Test-Path -LiteralPath $PathInfo.Path)) {
+        return "RED"
+    }
+
+    if ($GitSummary.Detached) {
+        return "RED"
+    }
+
+    if (-not (Test-Path -LiteralPath (Join-Path -Path $PathInfo.Path -ChildPath "CURRENT_TASK.md"))) {
+        return "RED"
+    }
+
+    $governanceFiles = @("AGENTS.md", "KNOWN_GOOD_STATE.md")
+    foreach ($fileName in $governanceFiles) {
+        if (-not (Test-Path -LiteralPath (Join-Path -Path $PathInfo.Path -ChildPath $fileName))) {
+            return "AMBER"
+        }
+    }
+
+    if ($GitSummary.DirtyCount -gt 0 -or $HandoffInfo.Hours -gt 24) {
+        return "AMBER"
+    }
+
+    return "GREEN"
+}
+
+function ConvertTo-ProjectFolderName {
+    param([string]$ProjectName)
+
+    $name = ($ProjectName -replace '[^A-Za-z0-9]+', '_').Trim('_').ToUpperInvariant()
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        throw "Project name did not produce a deterministic folder name."
+    }
+
+    return $name
+}
+
+function Expand-TemplateText {
+    param(
+        [string]$Text,
+        [string]$ProjectName,
+        [string]$ProjectPath
+    )
+
+    return $Text.Replace("{{PROJECT_NAME}}", $ProjectName).
+        Replace("{{PROJECT_PATH}}", $ProjectPath).
+        Replace("{{CURRENT_OBJECTIVE}}", "Define the first concrete objective.").
+        Replace("{{DATE}}", (Get-Date -Format "yyyy-MM-dd"))
+}
+
+function Copy-GovernanceTemplate {
+    param(
+        [string]$TemplateName,
+        [string]$TargetName,
+        [string]$ProjectName,
+        [string]$ProjectPath
+    )
+
+    throw "Project governance writes are disabled until a separate U command exists."
+}
+
+function Get-ProjectStatusFromTool {
+    param(
+        [string]$ProjectPath,
+        [string]$ProjectName
+    )
+
+    $toolPath = Join-Path -Path (Get-ToolsRoot) -ChildPath "project-status.ps1"
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        throw "Project status tool not found: $toolPath"
+    }
+
+    $json = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $toolPath `
+        -ProjectPath $ProjectPath `
+        -ProjectName $ProjectName `
+        -StateRoot (Get-StateRoot) `
+        -AsJson
+    if ($LASTEXITCODE -ne 0) {
+        throw "Project status tool failed for $ProjectPath"
+    }
+
+    return (($json -join "`n") | ConvertFrom-Json -ErrorAction Stop)
+}
+
+function Confirm-GovernanceWrite {
+    param(
+        [string]$ProjectPath,
+        [string]$ProjectName,
+        [string[]]$TargetFiles
+    )
+
+    $status = Get-ProjectStatusFromTool -ProjectPath $ProjectPath -ProjectName $ProjectName
+    Write-Host ""
+    Write-Host "Auto-status before project governance write" -ForegroundColor Cyan
+    Write-Host ("Project path: {0}" -f $status.project_path)
+    Write-Host ("Git status: {0}" -f ($status.git.status_sb -replace "`r?`n", " | "))
+    Write-Host ("Latest commit: {0}" -f $status.git.latest_commit)
+    Write-Host ("Detected current objective: {0}" -f $(if ($status.governance.current_objective) { $status.governance.current_objective } else { "Not detected." }))
+    Write-Host ("Detected next exact step: {0}" -f $(if ($status.governance.next_exact_step) { $status.governance.next_exact_step } else { "Not detected." }))
+    Write-Host "Files that would be modified:" -ForegroundColor Yellow
+    foreach ($target in $TargetFiles) {
+        Write-Host ("- {0}" -f $target) -ForegroundColor Yellow
+    }
+
+    $updatesCurrentTask = @($TargetFiles | Where-Object { [string]::Equals((Split-Path -Path $_ -Leaf), "CURRENT_TASK.md", [System.StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+    $prompt = if ($updatesCurrentTask) { "Proceed with updating CURRENT_TASK.md? Y/N" } else { "Proceed with this write action? Y/N" }
+    $answer = Read-ConsoleInput $prompt
+    return ($answer -match '^[Yy]$')
+}
+
+function New-CodexHubProject {
+    Write-Host "New Project is disabled in this CIS because no separate U command exists." -ForegroundColor Yellow
+    Write-Host "No project files were modified." -ForegroundColor Yellow
+}
+
 function Get-LiteOpsFileNames {
     return @(
         "CURRENT_TASK.md",
@@ -617,56 +828,8 @@ function Initialize-LiteOpsFiles {
         return
     }
 
-    $projectPath = Resolve-ProjectPath -Project $Project
-    if (-not (Test-Path -LiteralPath $projectPath)) {
-        Write-Host ""
-        Write-Host "Missing path: $projectPath" -ForegroundColor Yellow
-        return
-    }
-
-    $templates = @{
-        "CURRENT_TASK.md" = @(
-            "# CURRENT TASK",
-            "",
-            "- Objective:",
-            "- Next step:",
-            "- Notes:"
-        )
-        "DECISIONS.md" = @(
-            "# DECISIONS",
-            "",
-            "- Date:",
-            "- Decision:",
-            "- Reason:"
-        )
-        "KNOWN_GOOD_STATE.md" = @(
-            "# KNOWN GOOD STATE",
-            "",
-            "- Date:",
-            "- State:",
-            "- Verify:"
-        )
-    }
-
-    $created = @()
-    foreach ($fileName in (Get-LiteOpsFileNames)) {
-        $filePath = Join-Path -Path $projectPath -ChildPath $fileName
-        if (Test-Path -LiteralPath $filePath) {
-            continue
-        }
-
-        $templates[$fileName] | Set-Content -LiteralPath $filePath -Encoding utf8
-        $created += $filePath
-    }
-
-    if ($created.Count -eq 0) {
-        Write-Host "Lite Ops files already present for $(Get-Label -Project $Project)." -ForegroundColor DarkGray
-        return
-    }
-
-    foreach ($path in $created) {
-        Write-Host "Created: $path" -ForegroundColor Green
-    }
+    Write-Host "Initialize CODEX LITE OPS files is disabled in this CIS because no separate U command exists." -ForegroundColor Yellow
+    Write-Host "No project files were modified." -ForegroundColor Yellow
 }
 
 function Show-Header {
@@ -912,6 +1075,51 @@ function Open-HubPrompt {
     ) | Out-Null
 }
 
+function Invoke-DriftAudit {
+    param([object]$Project)
+
+    if ($null -eq $Project) {
+        return
+    }
+
+    $projectPath = Resolve-ProjectPath -Project $Project
+    $toolPath = Join-Path -Path (Get-ToolsRoot) -ChildPath "drift-audit.ps1"
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        Write-Host "Drift audit tool not found: $toolPath" -ForegroundColor Yellow
+        return
+    }
+
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $toolPath `
+        -ProjectPath $projectPath `
+        -ProjectName $Project.name `
+        -RegistryPath (Get-RegPath) `
+        -MachineProfilePath (Get-MachineProfilePath)
+
+    [void](Read-ConsoleInput "Press Enter to return to menu...")
+}
+
+function Invoke-Handoff {
+    param([object]$Project)
+
+    if ($null -eq $Project) {
+        return
+    }
+
+    $projectPath = Resolve-ProjectPath -Project $Project
+    $toolPath = Join-Path -Path (Get-ToolsRoot) -ChildPath "handoff.ps1"
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        Write-Host "Handoff tool not found: $toolPath" -ForegroundColor Yellow
+        return
+    }
+
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $toolPath `
+        -ProjectPath $projectPath `
+        -ProjectName $Project.name `
+        -StateRoot (Get-StateRoot)
+
+    return ($LASTEXITCODE -eq 10)
+}
+
 function Show-RecentProjectsMenu {
     $reg = @(Load-Reg)
     $recentEntries = @(Load-RecentProjects)
@@ -943,38 +1151,11 @@ function New-SnapshotHandoff {
     param([object]$Project)
 
     if ($null -eq $Project) {
-        return
+        return $false
     }
 
-    $projectPath = Resolve-ProjectPath -Project $Project
-    $snapshotDir = Join-Path -Path $projectPath -ChildPath "SNAPSHOT"
-    if (-not (Test-Path -LiteralPath $snapshotDir)) {
-        Write-Host "SNAPSHOT folder not found: $snapshotDir" -ForegroundColor Yellow
-        return
-    }
-
-    $stamp = Get-Date -Format "yyyy-MM-dd_HHmm"
-    $fileName = "HANDOFF_$stamp.md"
-    $snapshotPath = Join-Path -Path $snapshotDir -ChildPath $fileName
-    $taskPath = Join-Path -Path $projectPath -ChildPath "CURRENT_TASK.md"
-    $currentTaskSummary = if (Test-Path -LiteralPath $taskPath) { Get-Content -LiteralPath $taskPath -TotalCount 12 -Encoding utf8 } else { @("CURRENT_TASK.md not found.") }
-
-    $content = @(
-        "# HANDOFF SNAPSHOT"
-        ""
-        "- Project: $(Get-Label -Project $Project)"
-        "- Path: $projectPath"
-        "- Created: $((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))"
-        "- Git repo: $(if (Test-IsGitRepo -Path $projectPath) { 'Yes' } else { 'No' })"
-        ""
-        "## Resume Point"
-        "- Record the next exact action here."
-        ""
-        "## Current Task Snapshot"
-    ) + $currentTaskSummary
-
-    $content | Set-Content -LiteralPath $snapshotPath -Encoding utf8
-    Write-Host "Created snapshot: $snapshotPath" -ForegroundColor Green
+    Write-Host "Project SNAPSHOT handoff is replaced by hub Auto-Handoff under state\\handoffs." -ForegroundColor Yellow
+    return (Invoke-Handoff -Project $Project)
 }
 
 while ($true) {
@@ -987,25 +1168,32 @@ while ($true) {
         $pathInfo = Resolve-ProjectPathInfo -Project $project
         $resolvedPath = $pathInfo.Path
         $repoStatus = if (Test-IsGitRepo -Path $resolvedPath) { "git repo" } else { "folder only" }
+        $gitSummary = Get-ProjectGitSummary -ProjectPath $resolvedPath
+        $handoffInfo = Get-LastHandoffInfo -ProjectPath $resolvedPath -ProjectName $project.name
+        $health = Get-ProjectHealth -Project $project -PathInfo $pathInfo -GitSummary $gitSummary -HandoffInfo $handoffInfo
         Write-Host ("{0,2}. {1}" -f $menuNumber, (Get-Label -Project $project)) -ForegroundColor White
         Write-Host ("    {0}" -f $resolvedPath) -ForegroundColor DarkGray
-        Write-Host ("    status: {0}; source: {1}" -f $repoStatus, $pathInfo.Source) -ForegroundColor DarkCyan
+        Write-Host ("    Branch: {0}; State: {1}; Last handoff: {2}; Health: {3}" -f $gitSummary.Branch, $gitSummary.State, $handoffInfo.Text, $health) -ForegroundColor DarkCyan
+        Write-Host ("    status: {0}; source: {1}" -f $repoStatus, $pathInfo.Source) -ForegroundColor DarkGray
         if ($pathInfo.ConfiguredMissing) {
             Write-Host ("    warning: configured path missing: {0}" -f $pathInfo.ConfiguredPath) -ForegroundColor Yellow
         }
     }
 
     Write-Host ""
+    Write-Host "A. Audit current project" -ForegroundColor Cyan
+    Write-Host "D. Drift Audit" -ForegroundColor Cyan
+    Write-Host "H. Auto-Handoff / Shutdown" -ForegroundColor Cyan
+    Write-Host "N. New Project" -ForegroundColor Cyan
     Write-Host "R. Resume last project" -ForegroundColor Cyan
     Write-Host "J. Open from recent projects" -ForegroundColor Cyan
     Write-Host "T. Quick-open CURRENT_TASK.md" -ForegroundColor Cyan
-    Write-Host "S. Create snapshot handoff" -ForegroundColor Cyan
-    Write-Host "A. Open in Codex App" -ForegroundColor Cyan
+    Write-Host "S. Create hub auto-handoff snapshot" -ForegroundColor DarkCyan
+    Write-Host "X. Open in Codex App" -ForegroundColor Cyan
     Write-Host "C. Open command library" -ForegroundColor Cyan
-    Write-Host "B. Open new project bootstrap prompt" -ForegroundColor Cyan
-    Write-Host "D. Open drift check prompt" -ForegroundColor Cyan
-    Write-Host "P. Open project shutdown check prompt" -ForegroundColor Cyan
-    Write-Host "H. Open CODEX root" -ForegroundColor Cyan
+    Write-Host "B. Open new project bootstrap prompt" -ForegroundColor DarkCyan
+    Write-Host "P. Open project shutdown check prompt" -ForegroundColor DarkCyan
+    Write-Host "O. Open CODEX root" -ForegroundColor Cyan
     Write-Host "V. Initialize CODEX LITE OPS files" -ForegroundColor Cyan
     Write-Host "0. Exit" -ForegroundColor Cyan
     Write-Host ""
@@ -1038,13 +1226,42 @@ while ($true) {
             continue
         }
         '^[Ss]$' {
-            $project = Pick-Project -Projects $activeProjects -Title "Create Snapshot Handoff"
+            $project = Pick-Project -Projects $activeProjects -Title "Create Hub Auto-Handoff Snapshot"
             if ($null -ne $project) {
-                New-SnapshotHandoff -Project $project
+                if (New-SnapshotHandoff -Project $project) {
+                    return
+                }
             }
             continue
         }
         '^[Aa]$' {
+            $project = Pick-Project -Projects $activeProjects -Title "Audit Current Project"
+            if ($null -ne $project) {
+                Invoke-DriftAudit -Project $project
+            }
+            continue
+        }
+        '^[Dd]$' {
+            $project = Pick-Project -Projects $activeProjects -Title "Drift Audit"
+            if ($null -ne $project) {
+                Invoke-DriftAudit -Project $project
+            }
+            continue
+        }
+        '^[Hh]$' {
+            $project = Pick-Project -Projects $activeProjects -Title "Auto-Handoff / Shutdown"
+            if ($null -ne $project) {
+                if (Invoke-Handoff -Project $project) {
+                    return
+                }
+            }
+            continue
+        }
+        '^[Nn]$' {
+            New-CodexHubProject
+            continue
+        }
+        '^[Xx]$' {
             Show-CodexAppProjectsMenu
             continue
         }
@@ -1063,15 +1280,11 @@ while ($true) {
             Open-HubPrompt -FileName "NEW_PROJECT_BOOTSTRAP.txt"
             continue
         }
-        '^[Dd]$' {
-            Open-HubPrompt -FileName "DRIFT_CHECK.txt"
-            continue
-        }
         '^[Pp]$' {
             Open-HubPrompt -FileName "PROJECT_SHUTDOWN_CHECK.txt"
             continue
         }
-        '^[Hh]$' {
+        '^[Oo]$' {
             Open-Proj -Project ([pscustomobject]@{
                 name = "CODEX_ROOT"
                 display_name = "CODEX Root"
