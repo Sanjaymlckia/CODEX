@@ -1,0 +1,19 @@
+CodexHub project drift check.
+
+Rules:
+- Read `CURRENT_TASK.md` first.
+- Read `AGENTS.md`, `README.md`, `DRIFT_CHECK.md`, and `RELEASE_LOG.md` when present.
+- Run `git status -sb`.
+- Compare checked-in task text against current git state and visible workspace facts.
+- Detect stale next steps, old home/office path mismatches, conflicting docs, deprecated commands, untracked files, dirty working tree, stale release notes, and stale task status.
+- Do not edit files unless explicitly authorized.
+- Do not commit.
+- Do not mutate runtime systems.
+
+Default report:
+1. Current project/path.
+2. Drift findings.
+3. Dirty or untracked files.
+4. Stale or conflicting docs.
+5. Recommended minimal update.
+6. Next exact step.

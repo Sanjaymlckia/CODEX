@@ -43,3 +43,8 @@
   - Launcher menus now show resolved path source and warn when the configured registry path is missing on the current machine.
   - Shared FODE registry path remains the home authority path; office FODE should be supplied by a local machine profile override, not by replacing the shared registry path.
   - `state\machine_profile.json` is currently tracked; do not commit machine-specific local paths from it without an explicit tracking/ignore decision.
+- Governance scaffold update (2026-05-08):
+  - Make `state\machine_profile.json` local-only by ignoring it and removing it from Git tracking while preserving the local file.
+  - Add `templates\project_scaffold\` with default project guardrail files.
+  - Add hub prompts for new project bootstrap, project shutdown check, and drift check.
+  - Expose the governance prompts from `RUN.ps1` as read-only prompt viewers.

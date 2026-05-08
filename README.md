@@ -39,6 +39,7 @@ The launcher menu prints each project name, resolved path, source (`override`, `
 - `RUN.ps1` - registry-driven portable launcher
 - `projects\projects.json` - project registry and labels
 - `prompts\` - per-project startup prompts
+- `templates\project_scaffold\` - default governance files for new projects
 - `state\machine_profile.json` - machine-aware preferred project root and optional local project path overrides
 - `state\last_project.txt` and `state\recent_projects.json` - launcher memory
 - `COMMAND_LIBRARY.md` - short command reference
@@ -53,6 +54,9 @@ The launcher menu prints each project name, resolved path, source (`override`, `
 - `S` - create a snapshot handoff file
 - `A` - open the selected project in Codex Desktop
 - `C` - open the command library
+- `B` - open the new project bootstrap prompt
+- `D` - open the drift check prompt
+- `P` - open the project shutdown check prompt
 - `H` - open the hub root
 - `V` - initialize CODEX LITE OPS files
 - `0` - exit
@@ -75,3 +79,5 @@ Operating pattern:
 3. Update `CURRENT_TASK.md` before closing a major session.
 4. Keep long-form notes in `NOTES.md`.
 5. Preserve source evidence, imports, exports, and generated outputs.
+
+New projects should start from `templates\project_scaffold\` so `CURRENT_TASK.md`, `AGENTS.md`, `README.md`, `RELEASE_LOG.md`, `DECISIONS.md`, `DRIFT_CHECK.md`, and `SHUTDOWN_CHECKLIST.md` exist from the first session.

@@ -28,6 +28,7 @@ function Get-MachineProfilePath { Join-Path -Path (Get-StateRoot) -ChildPath "ma
 function Get-RecentPath { Join-Path -Path (Get-StateRoot) -ChildPath "recent_projects.json" }
 function Get-PromptsRoot { Join-Path -Path (Get-Root) -ChildPath "prompts" }
 function Get-CommandLibraryPath { Join-Path -Path (Get-Root) -ChildPath "COMMAND_LIBRARY.md" }
+function Get-HubPromptPath { param([string]$FileName) Join-Path -Path (Get-PromptsRoot) -ChildPath $FileName }
 
 function Get-PromptPath {
     param([string]$ProjectName)
@@ -895,6 +896,22 @@ function Open-CurrentTaskQuick {
     ) | Out-Null
 }
 
+function Open-HubPrompt {
+    param([string]$FileName)
+
+    $path = Get-HubPromptPath -FileName $FileName
+    if (-not (Test-Path -LiteralPath $path)) {
+        Write-Host "Prompt not found: $path" -ForegroundColor Yellow
+        return
+    }
+
+    Start-Process powershell.exe -ArgumentList @(
+        "-NoExit",
+        "-ExecutionPolicy", "Bypass",
+        "-Command", "Get-Content -LiteralPath $(ConvertTo-SingleQuotedPowerShellLiteral -Value $path) -Encoding utf8"
+    ) | Out-Null
+}
+
 function Show-RecentProjectsMenu {
     $reg = @(Load-Reg)
     $recentEntries = @(Load-RecentProjects)
@@ -985,6 +1002,9 @@ while ($true) {
     Write-Host "S. Create snapshot handoff" -ForegroundColor Cyan
     Write-Host "A. Open in Codex App" -ForegroundColor Cyan
     Write-Host "C. Open command library" -ForegroundColor Cyan
+    Write-Host "B. Open new project bootstrap prompt" -ForegroundColor Cyan
+    Write-Host "D. Open drift check prompt" -ForegroundColor Cyan
+    Write-Host "P. Open project shutdown check prompt" -ForegroundColor Cyan
     Write-Host "H. Open CODEX root" -ForegroundColor Cyan
     Write-Host "V. Initialize CODEX LITE OPS files" -ForegroundColor Cyan
     Write-Host "0. Exit" -ForegroundColor Cyan
@@ -1037,6 +1057,18 @@ while ($true) {
                     "-Command", "Get-Content -LiteralPath $(ConvertTo-SingleQuotedPowerShellLiteral -Value $path)"
                 ) | Out-Null
             }
+            continue
+        }
+        '^[Bb]$' {
+            Open-HubPrompt -FileName "NEW_PROJECT_BOOTSTRAP.txt"
+            continue
+        }
+        '^[Dd]$' {
+            Open-HubPrompt -FileName "DRIFT_CHECK.txt"
+            continue
+        }
+        '^[Pp]$' {
+            Open-HubPrompt -FileName "PROJECT_SHUTDOWN_CHECK.txt"
             continue
         }
         '^[Hh]$' {

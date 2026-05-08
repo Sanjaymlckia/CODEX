@@ -1,0 +1,19 @@
+CodexHub new project bootstrap.
+
+Rules:
+- Ask for project name, path, and type if any are missing.
+- Create scaffold files from `templates/project_scaffold/`.
+- Initialize git only if explicitly authorized.
+- Never overwrite existing files without showing the diff and receiving approval.
+- Create a first `CURRENT_TASK.md` with project name, objective, authoritative path, current state, allowed scope, forbidden scope, next exact step, open risks, last verified git status, and last shutdown note.
+- Create `AGENTS.md` from the scaffold.
+- Create `DRIFT_CHECK.md` and `SHUTDOWN_CHECKLIST.md` from the scaffold.
+- Report the exact next step when complete.
+
+Default sequence:
+1. Confirm working directory and intended project path.
+2. Check whether target files already exist.
+3. Show proposed file list and any diffs for existing files.
+4. Create only approved files.
+5. Run `git status -sb`.
+6. Report created files and next exact command.
