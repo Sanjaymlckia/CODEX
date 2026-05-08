@@ -33,3 +33,8 @@
   - Did not create ZOHO_CRM_FODE; FODE CRM remains in the existing FODE project.
   - Did not move/delete existing files, modify Zoho data files, run imports, or touch live Zoho.
   - Launcher verification: active root D:\CODEX_PROJECTS; new entries resolve to folders 8, 9, and 10.
+- Office readiness update (2026-05-08):
+  - Requested office roots are `C:\CODEX` and `C:\CODEX_PROJECTS`; they are not present in the current session filesystem view.
+  - Added DATA_GOVERNANCE to projects\projects.json with a C-root configured path so the machine-aware resolver can use `C:\CODEX_PROJECTS\DATA_GOVERNANCE` at office and `D:\CODEX_PROJECTS\DATA_GOVERNANCE` at home.
+  - Corrected FODE registry notes: home authority is `E:\Gdrive\01 SANJAY\Codex_Sync\FODE_Runtime_1wog`; office should use `C:\CODEX_PROJECTS\FODE_Runtime_1wog` only if cloned there.
+  - No FODE runtime source, clasp, deployment, trigger, or Apps Script runtime mutation was performed.
