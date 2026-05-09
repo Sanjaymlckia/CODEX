@@ -8,3 +8,7 @@ state/machine_profile.json
 state/handoffs/
 
 audit/
+
+audit/
+
+*.bundle
