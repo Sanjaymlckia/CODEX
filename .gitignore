@@ -6,3 +6,5 @@ handoff/
 state/machine_profile.json
 
 state/handoffs/
+
+audit/
