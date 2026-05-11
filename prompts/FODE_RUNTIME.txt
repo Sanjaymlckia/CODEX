@@ -4,7 +4,7 @@ Do not modify unrelated files.
 Always read CURRENT_TASK.md first.
 
 Authoritative local repo:
-C:\FODE_Runtime_1wog
+Use CodexHub machine_profile.json override for FODE_RUNTIME path
 
 GitHub repo:
 Sanjaymlckia/FODE_Runtime_1wog
@@ -33,3 +33,4 @@ Release restrictions:
 - Do not run clasp push, clasp version, deploy, pin, git commit, git push, or tag unless explicitly instructed by CIS.
 - Do not edit Apps Script source, appsscript.json, or .clasp.json unless explicitly authorized.
 - Do not infer live runtime from local files.
+
