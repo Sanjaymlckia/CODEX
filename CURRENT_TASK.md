@@ -55,3 +55,8 @@
   - Add launcher commands: `N` New Project, `D` Drift Audit, `A` Audit selected project, `H` Handoff / Shutdown.
   - Move Codex App launch to `X` and hub-root launch to `O`.
   - Add lightweight branch, dirty state, handoff age, and health display to launcher project rows.
+- Shutdown reliability update (2026-05-11):
+  - Root cause isolated to child-process handoff input: `RUN.ps1` launched `tools\handoff.ps1`, then the child script waited on raw console reads for exit/menu flow.
+  - Because the child pause was not owned by the parent launcher, shutdown could appear silent and consume an extra Enter before control visibly returned.
+  - Fix scope is hub-only and generic for all projects: parent launcher now owns optional note capture, final shutdown report, explicit exit choice, and explicit `Press Enter to return to CodexHub menu` prompt.
+  - Auto-handoff file and snapshot generation remain in the existing tool path under `state\handoffs` and `state\*_snapshot.json`.

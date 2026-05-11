@@ -782,6 +782,140 @@ function Get-ProjectStatusFromTool {
     return (($json -join "`n") | ConvertFrom-Json -ErrorAction Stop)
 }
 
+function Get-ProjectSnapshotPath {
+    param([string]$ProjectName)
+
+    if ([string]::IsNullOrWhiteSpace($ProjectName)) {
+        return ""
+    }
+
+    $safeProjectName = ($ProjectName -replace '[^A-Za-z0-9_.-]', '_').Trim('_')
+    if ([string]::IsNullOrWhiteSpace($safeProjectName)) {
+        $safeProjectName = "PROJECT"
+    }
+
+    return Join-Path -Path (Get-StateRoot) -ChildPath ("{0}_snapshot.json" -f $safeProjectName)
+}
+
+function Get-ProjectSnapshotInfo {
+    param([string]$ProjectName)
+
+    $snapshotPath = Get-ProjectSnapshotPath -ProjectName $ProjectName
+    if ([string]::IsNullOrWhiteSpace($snapshotPath) -or -not (Test-Path -LiteralPath $snapshotPath)) {
+        return $null
+    }
+
+    try {
+        return (Get-Content -LiteralPath $snapshotPath -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop)
+    } catch {
+        return $null
+    }
+}
+
+function Get-ResumeReadiness {
+    param([object]$Status)
+
+    if ($null -eq $Status) {
+        return "BLOCKED"
+    }
+
+    if (
+        -not $Status.path_exists -or
+        -not $Status.governance.current_task_present -or
+        [string]::Equals([string]$Status.severity, "RED", [System.StringComparison]::OrdinalIgnoreCase)
+    ) {
+        return "BLOCKED"
+    }
+
+    return "READY"
+}
+
+function Show-HandoffReport {
+    param(
+        [object]$Project,
+        [object]$Status,
+        [object]$SnapshotInfo
+    )
+
+    $projectLabel = Get-Label -Project $Project
+    $machineName = if ($null -ne $SnapshotInfo -and $SnapshotInfo.PSObject.Properties["machine"]) { [string]$SnapshotInfo.machine } else { $env:COMPUTERNAME }
+    $pathValue = if ($null -ne $Status) { [string]$Status.project_path } else { Resolve-ProjectPath -Project $Project }
+    $gitStatusSummary = if ($null -ne $Status) { ([string]$Status.git.status_sb -replace "`r?`n", " | ") } else { "Not available." }
+    $taskCheck = if ($null -ne $Status -and $Status.governance.current_task_present) {
+        if ([string]::IsNullOrWhiteSpace([string]$Status.governance.next_exact_step)) {
+            "Checked only; CURRENT_TASK.md present; next exact step not detected; no update performed."
+        } else {
+            "Checked only; CURRENT_TASK.md present; next exact step detected; no update performed."
+        }
+    } else {
+        "Checked only; CURRENT_TASK.md missing; no update performed."
+    }
+    $handoffLocation = if ($null -ne $SnapshotInfo -and $SnapshotInfo.PSObject.Properties["handoff_path"] -and -not [string]::IsNullOrWhiteSpace([string]$SnapshotInfo.handoff_path)) {
+        [string]$SnapshotInfo.handoff_path
+    } else {
+        "Not created."
+    }
+    $snapshotLocation = if ($null -ne $SnapshotInfo) {
+        Get-ProjectSnapshotPath -ProjectName $Project.name
+    } else {
+        "Not created."
+    }
+    $resumeCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"{0}`"" -f (Join-Path -Path (Get-Root) -ChildPath "RUN.ps1")
+    $lastCompletedAction = if ($null -ne $Status -and -not [string]::IsNullOrWhiteSpace([string]$Status.git.latest_commit)) {
+        [string]$Status.git.latest_commit
+    } else {
+        "Not detected."
+    }
+    $pendingNextAction = if ($null -ne $Status -and -not [string]::IsNullOrWhiteSpace([string]$Status.governance.next_exact_step)) {
+        [string]$Status.governance.next_exact_step
+    } else {
+        "Not detected."
+    }
+    $notes = New-Object System.Collections.Generic.List[string]
+    if ($null -ne $Status) {
+        if (-not $Status.path_exists) {
+            $notes.Add("Project path is missing.") | Out-Null
+        }
+        if (-not $Status.governance.current_task_present) {
+            $notes.Add("CURRENT_TASK.md missing.") | Out-Null
+        }
+        if ($Status.git.dirty) {
+            $notes.Add("Working tree is dirty.") | Out-Null
+        }
+        if ($null -ne $Status.apps_script -and $Status.apps_script.applicable -and $Status.apps_script.warnings.Count -gt 0) {
+            $notes.Add(($Status.apps_script.warnings -join "; ")) | Out-Null
+        }
+    }
+    if ($null -eq $SnapshotInfo) {
+        $notes.Add("Snapshot metadata could not be reloaded after handoff.") | Out-Null
+    }
+    if ($notes.Count -eq 0) {
+        $notes.Add("No blocking shutdown issues detected.") | Out-Null
+    }
+
+    Write-Host ""
+    Write-Host "Shutdown Report" -ForegroundColor Cyan
+    Write-Host ("Project: {0}" -f $projectLabel) -ForegroundColor White
+    Write-Host ("Machine: {0}" -f $machineName)
+    Write-Host ("Path: {0}" -f $pathValue)
+    Write-Host ("Git status: {0}" -f $gitStatusSummary)
+    Write-Host ("CURRENT_TASK.md check: {0}" -f $taskCheck)
+    Write-Host ("Handoff file: {0}" -f $handoffLocation) -ForegroundColor Cyan
+    Write-Host ("Snapshot/checklist: {0}" -f $snapshotLocation) -ForegroundColor DarkCyan
+    Write-Host ("Next recommended resume command: {0}" -f $resumeCommand) -ForegroundColor DarkCyan
+    Write-Host ""
+    Write-Host "Resume Block" -ForegroundColor Cyan
+    Write-Host ("Project: {0}" -f $projectLabel)
+    Write-Host ("Machine: {0}" -f $machineName)
+    Write-Host ("Path: {0}" -f $pathValue)
+    Write-Host ("Git status: {0}" -f $gitStatusSummary)
+    Write-Host ("Last completed action: {0}" -f $lastCompletedAction)
+    Write-Host ("Pending next action: {0}" -f $pendingNextAction)
+    Write-Host ("Resume readiness: {0}" -f (Get-ResumeReadiness -Status $Status)) -ForegroundColor Cyan
+    Write-Host ("Notes: {0}" -f ($notes -join " | "))
+    Write-Host ""
+}
+
 function Confirm-GovernanceWrite {
     param(
         [string]$ProjectPath,
@@ -1109,15 +1243,32 @@ function Invoke-Handoff {
     $toolPath = Join-Path -Path (Get-ToolsRoot) -ChildPath "handoff.ps1"
     if (-not (Test-Path -LiteralPath $toolPath)) {
         Write-Host "Handoff tool not found: $toolPath" -ForegroundColor Yellow
-        return
+        return $false
     }
 
+    $operatorNote = Read-ConsoleInput "Add one optional operator note? Leave blank to skip"
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $toolPath `
         -ProjectPath $projectPath `
         -ProjectName $Project.name `
-        -StateRoot (Get-StateRoot)
+        -StateRoot (Get-StateRoot) `
+        -OperatorNote $operatorNote `
+        -SkipPause
 
-    return ($LASTEXITCODE -eq 10)
+    $shouldExit = ($LASTEXITCODE -eq 10)
+    $status = Get-ProjectStatusFromTool -ProjectPath $projectPath -ProjectName $Project.name
+    $snapshotInfo = Get-ProjectSnapshotInfo -ProjectName $Project.name
+    Show-HandoffReport -Project $Project -Status $status -SnapshotInfo $snapshotInfo
+
+    if (-not $shouldExit) {
+        $exitAnswer = Read-ConsoleInput "Exit CodexHub now? Y/N"
+        if ($exitAnswer -match '^[Yy]$') {
+            $shouldExit = $true
+        } else {
+            [void](Read-ConsoleInput "Press Enter to return to CodexHub menu")
+        }
+    }
+
+    return $shouldExit
 }
 
 function Show-RecentProjectsMenu {

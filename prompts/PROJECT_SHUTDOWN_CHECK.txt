@@ -12,8 +12,20 @@ Rules:
 
 Default report:
 1. Current project/path.
-2. Current task summary.
-3. Dirty or untracked files.
-4. Stale-state findings.
-5. Recommended `CURRENT_TASK.md` update, if any.
-6. Next exact command.
+2. Git status summary.
+3. Current task summary.
+4. `CURRENT_TASK.md` update/check result.
+5. Snapshot/checklist location if created.
+6. Dirty or untracked files.
+7. Stale-state findings.
+8. Recommended `CURRENT_TASK.md` update, if any.
+9. Next exact command.
+10. Final concise resume block:
+   - Project
+   - Machine
+   - Path
+   - Git status
+   - Last completed action
+   - Pending next action
+   - Resume readiness: READY / BLOCKED
+   - Notes
