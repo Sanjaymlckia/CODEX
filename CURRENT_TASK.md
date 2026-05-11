@@ -36,7 +36,7 @@
 - Office readiness update (2026-05-08):
   - Requested office roots are `C:\CODEX` and `C:\CODEX_PROJECTS`; they are not present in the current session filesystem view.
   - Added DATA_GOVERNANCE to projects\projects.json with a C-root configured path so the machine-aware resolver can use `C:\CODEX_PROJECTS\DATA_GOVERNANCE` at office and `D:\CODEX_PROJECTS\DATA_GOVERNANCE` at home.
-  - Corrected FODE registry notes: home authority is `E:\Gdrive\01 SANJAY\Codex_Sync\FODE_Runtime_1wog`; office should use `C:\CODEX_PROJECTS\FODE_Runtime_1wog` only if cloned there.
+ Corrected FODE registry notes: FODE path authority is machine-specific and must be resolved through CodexHub machine_profile.json overrides.
   - No FODE runtime source, clasp, deployment, trigger, or Apps Script runtime mutation was performed.
 - Machine-specific path override update (2026-05-08):
   - RUN.ps1 resolves project paths in order: local `state\machine_profile.json` project override, shared registry path, active-root fallback, then missing-path report.
