@@ -618,9 +618,11 @@ function Get-ProjectGitSummary {
     if (-not (Test-IsGitRepo -Path $ProjectPath)) {
         return [pscustomobject]@{
             Branch = "no git"
+            Head = ""
             DirtyCount = 0
             State = "NO-GIT"
             Detached = $false
+            StatusSummary = "Not a git repository."
         }
     }
 
@@ -629,15 +631,510 @@ function Get-ProjectGitSummary {
         $branch = "unknown"
     }
 
+    $head = (& git -C $ProjectPath rev-parse --short HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($head)) {
+        $head = ""
+    }
+
     $status = @(& git -C $ProjectPath status --porcelain 2>$null)
     $dirtyCount = if ($LASTEXITCODE -eq 0) { $status.Count } else { 0 }
     $detached = [string]::Equals($branch, "HEAD", [System.StringComparison]::OrdinalIgnoreCase)
+    $statusSummary = & git -C $ProjectPath status -sb 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($statusSummary)) {
+        $statusSummary = if ($dirtyCount -gt 0) { "dirty" } else { "clean" }
+    }
 
     return [pscustomobject]@{
         Branch = $branch
+        Head = [string]$head
         DirtyCount = $dirtyCount
         State = if ($dirtyCount -gt 0) { "DIRTY (+$dirtyCount)" } else { "CLEAN" }
         Detached = $detached
+        StatusSummary = [string]$statusSummary
+    }
+}
+
+function Get-ProjectCurrentTaskDigest {
+    param([string]$ProjectPath)
+
+    $taskPath = Join-Path -Path $ProjectPath -ChildPath "CURRENT_TASK.md"
+    if (-not (Test-Path -LiteralPath $taskPath)) {
+        return [pscustomobject]@{
+            Path = $taskPath
+            Exists = $false
+            Hash = ""
+            LastWriteTime = $null
+            Timestamp = ""
+        }
+    }
+
+    $item = Get-Item -LiteralPath $taskPath
+    $hash = ""
+    try {
+        $hash = (Get-FileHash -LiteralPath $taskPath -Algorithm SHA256).Hash
+    } catch {
+        $hash = ""
+    }
+
+    return [pscustomobject]@{
+        Path = $taskPath
+        Exists = $true
+        Hash = [string]$hash
+        LastWriteTime = $item.LastWriteTime
+        Timestamp = $item.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+    }
+}
+
+function Get-ProjectResumeStatePath {
+    param([string]$ProjectName)
+
+    if ([string]::IsNullOrWhiteSpace($ProjectName)) {
+        return ""
+    }
+
+    $safeProjectName = ($ProjectName -replace '[^A-Za-z0-9_.-]', '_').Trim('_')
+    if ([string]::IsNullOrWhiteSpace($safeProjectName)) {
+        $safeProjectName = "PROJECT"
+    }
+
+    return Join-Path -Path (Get-StateRoot) -ChildPath ("{0}_resume_state.json" -f $safeProjectName)
+}
+
+function Get-CodexSessionId {
+    if (-not [string]::IsNullOrWhiteSpace($env:CODEX_THREAD_ID)) {
+        return $env:CODEX_THREAD_ID.Trim()
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:CODEX_SESSION_ID)) {
+        return $env:CODEX_SESSION_ID.Trim()
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:CODEX_RESUME_SESSION_ID)) {
+        return $env:CODEX_RESUME_SESSION_ID.Trim()
+    }
+
+    return ""
+}
+
+function Load-ProjectResumeState {
+    param([string]$ProjectName)
+
+    $statePath = Get-ProjectResumeStatePath -ProjectName $ProjectName
+    if ([string]::IsNullOrWhiteSpace($statePath) -or -not (Test-Path -LiteralPath $statePath)) {
+        return $null
+    }
+
+    try {
+        return (Get-Content -LiteralPath $statePath -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop)
+    } catch {
+        return $null
+    }
+}
+
+function Save-ProjectResumeState {
+    param(
+        [Parameter(Mandatory = $true)][object]$State,
+        [Parameter(Mandatory = $true)][string]$ProjectName
+    )
+
+    $statePath = Get-ProjectResumeStatePath -ProjectName $ProjectName
+    if ([string]::IsNullOrWhiteSpace($statePath)) {
+        return ""
+    }
+
+    Ensure-ParentDirectory -Path $statePath
+    $State | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $statePath -Encoding utf8
+    return $statePath
+}
+
+function Get-ProjectResumeValidation {
+    param(
+        [object]$Project,
+        [object]$GitSummary,
+        [object]$TaskDigest,
+        [object]$ResumeState,
+        [object]$SnapshotInfo
+    )
+
+    $reasons = New-Object System.Collections.Generic.List[string]
+    $state = "CLEAN"
+    $machineName = [string]$env:COMPUTERNAME
+    $crossMachine = $false
+    $recommendedMode = "resume"
+    $resumeCommand = ""
+    $projectPathValue = if ($null -ne $Project -and $null -ne $Project.PSObject.Properties["path"]) { [string]$Project.path } else { "" }
+    $projectNameValue = if ($null -ne $Project -and $null -ne $Project.PSObject.Properties["name"]) { [string]$Project.name } else { "" }
+    $currentTaskHash = if ($null -ne $TaskDigest) { [string]$TaskDigest.Hash } else { "" }
+    $currentTaskTimestamp = if ($null -ne $TaskDigest) { [string]$TaskDigest.Timestamp } else { "" }
+    $runtimeVersion = ""
+    $deployVersion = 0
+    if ($null -ne $SnapshotInfo) {
+        if ($SnapshotInfo.PSObject.Properties["apps_script_version"]) { $runtimeVersion = [string]$SnapshotInfo.apps_script_version }
+        if ($SnapshotInfo.PSObject.Properties["apps_script_deploy_version_number"]) { $deployVersion = [int]$SnapshotInfo.apps_script_deploy_version_number }
+        if ([string]::IsNullOrWhiteSpace($runtimeVersion) -and $SnapshotInfo.PSObject.Properties["version"]) { $runtimeVersion = [string]$SnapshotInfo.version }
+        if ($deployVersion -le 0 -and $SnapshotInfo.PSObject.Properties["deployVersion"]) { $deployVersion = [int]$SnapshotInfo.deployVersion }
+    }
+
+    if ($null -eq $ResumeState) {
+        return [pscustomobject]@{
+            State = "BLOCKED"
+            Reasons = @("Missing resume state.")
+            ResumeCommand = ""
+            RecommendedMode = "reconstruct"
+            CrossMachine = $false
+            ResumeAvailable = $false
+            SavedSessionId = ""
+            CurrentTaskHash = $currentTaskHash
+            CurrentTaskTimestamp = $currentTaskTimestamp
+            SavedMachineName = ""
+            CurrentMachineName = $machineName
+            SavedBranch = ""
+            CurrentBranch = if ($null -ne $GitSummary) { [string]$GitSummary.Branch } else { "" }
+            SavedHead = ""
+            CurrentHead = if ($null -ne $GitSummary) { [string]$GitSummary.Head } else { "" }
+            RuntimeVersion = $runtimeVersion
+            DeployVersion = $deployVersion
+        }
+    }
+
+    $savedSessionId = [string]$ResumeState.codex_session_id
+    $savedRepoPath = [string]$ResumeState.repo_path
+    $savedMachineName = [string]$ResumeState.machine_name
+    $savedBranch = [string]$ResumeState.branch
+    $savedHead = [string]$ResumeState.git_head
+    $savedTaskHash = [string]$ResumeState.current_task_hash
+    $savedTaskTimestamp = if ($null -ne $ResumeState.PSObject.Properties["current_task_timestamp"]) { [string]$ResumeState.current_task_timestamp } else { "" }
+    $savedRuntimeVersion = [string]$ResumeState.runtime_version
+    $savedDeployVersion = [int]($ResumeState.deploy_version_number | ForEach-Object { $_ })
+    if ($savedDeployVersion -eq 0 -and $null -ne $ResumeState.PSObject.Properties["deploy_version_number"]) {
+        $savedDeployVersion = [int]$ResumeState.deploy_version_number
+    }
+
+    if ([string]::IsNullOrWhiteSpace($savedSessionId)) {
+        $state = "BLOCKED"
+        $reasons.Add("Missing Codex session ID.") | Out-Null
+    }
+
+    if ([string]::IsNullOrWhiteSpace($projectPathValue) -or -not (Test-Path -LiteralPath $projectPathValue)) {
+        $state = "BLOCKED"
+        $reasons.Add("Project path is missing.") | Out-Null
+    }
+
+    if ($null -eq $GitSummary -or [string]::IsNullOrWhiteSpace([string]$GitSummary.Branch) -or [string]::Equals([string]$GitSummary.State, "NO-GIT", [System.StringComparison]::OrdinalIgnoreCase)) {
+        $state = "BLOCKED"
+        $reasons.Add("Git repository is missing.") | Out-Null
+    } elseif ($GitSummary.Detached) {
+        $state = "BLOCKED"
+        $reasons.Add("Detached HEAD detected.") | Out-Null
+    }
+
+    if ($null -eq $TaskDigest -or -not $TaskDigest.Exists) {
+        $state = "BLOCKED"
+        $reasons.Add("CURRENT_TASK.md is missing.") | Out-Null
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($savedRepoPath) -and -not [string]::Equals($savedRepoPath, $projectPathValue, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $state = "BLOCKED"
+        $reasons.Add("Saved repo path does not match the selected project path.") | Out-Null
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($savedMachineName) -and -not [string]::Equals($savedMachineName, $machineName, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $crossMachine = $true
+        if ($state -ne "BLOCKED") {
+            $state = "WARNING"
+        }
+        $reasons.Add("CROSS-MACHINE RESUME") | Out-Null
+    }
+
+    if ($null -ne $GitSummary -and -not [string]::IsNullOrWhiteSpace($savedBranch) -and -not [string]::Equals($savedBranch, [string]$GitSummary.Branch, [System.StringComparison]::OrdinalIgnoreCase)) {
+        if ($state -ne "BLOCKED") {
+            $state = "WARNING"
+        }
+        $reasons.Add("Branch changed since last shutdown.") | Out-Null
+    }
+
+    if ($null -ne $GitSummary -and -not [string]::IsNullOrWhiteSpace($savedHead) -and -not [string]::Equals($savedHead, [string]$GitSummary.Head, [System.StringComparison]::OrdinalIgnoreCase)) {
+        if ($state -ne "BLOCKED") {
+            $state = "WARNING"
+        }
+        $reasons.Add("Git HEAD changed since last shutdown.") | Out-Null
+    }
+
+    if ($null -ne $GitSummary -and $GitSummary.DirtyCount -gt 0) {
+        if ($state -ne "BLOCKED") {
+            $state = "WARNING"
+        }
+        $reasons.Add(("Working tree has {0} change(s)." -f $GitSummary.DirtyCount)) | Out-Null
+    }
+
+    if ($null -ne $TaskDigest -and $TaskDigest.Exists -and -not [string]::IsNullOrWhiteSpace($savedTaskHash) -and -not [string]::Equals($savedTaskHash, $currentTaskHash, [System.StringComparison]::OrdinalIgnoreCase)) {
+        if ($state -ne "BLOCKED") {
+            $state = "WARNING"
+        }
+        $reasons.Add("CURRENT_TASK.md changed since last shutdown.") | Out-Null
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($savedRuntimeVersion) -and -not [string]::IsNullOrWhiteSpace($runtimeVersion) -and -not [string]::Equals($savedRuntimeVersion, $runtimeVersion, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $state = "BLOCKED"
+        $reasons.Add("Runtime version changed since last shutdown.") | Out-Null
+    }
+
+    if ($savedDeployVersion -gt 0 -and $deployVersion -gt 0 -and $savedDeployVersion -ne $deployVersion) {
+        $state = "BLOCKED"
+        $reasons.Add("Deploy version changed since last shutdown.") | Out-Null
+    }
+
+    if ($state -eq "BLOCKED") {
+        $recommendedMode = "reconstruct"
+    } elseif ($state -eq "WARNING") {
+        $recommendedMode = "reconstruct"
+    }
+
+    if ($state -eq "CLEAN" -and -not [string]::IsNullOrWhiteSpace($savedSessionId)) {
+        $resumeCommand = "codex resume $savedSessionId"
+    } elseif (-not [string]::IsNullOrWhiteSpace($savedSessionId)) {
+        $resumeCommand = "codex resume $savedSessionId"
+    }
+
+    return [pscustomobject]@{
+        State = $state
+        Reasons = @($reasons)
+        ResumeCommand = $resumeCommand
+        RecommendedMode = $recommendedMode
+        CrossMachine = $crossMachine
+        ResumeAvailable = (-not [string]::IsNullOrWhiteSpace($savedSessionId))
+        SavedSessionId = $savedSessionId
+        SavedRepoPath = $savedRepoPath
+        SavedMachineName = $savedMachineName
+        SavedBranch = $savedBranch
+        SavedHead = $savedHead
+        SavedTaskHash = $savedTaskHash
+        SavedTaskTimestamp = $savedTaskTimestamp
+        SavedRuntimeVersion = $savedRuntimeVersion
+        SavedDeployVersion = $savedDeployVersion
+        CurrentTaskHash = $currentTaskHash
+        CurrentTaskTimestamp = $currentTaskTimestamp
+        CurrentMachineName = $machineName
+        CurrentProjectPath = $projectPathValue
+        CurrentProjectName = $projectNameValue
+        CurrentBranch = if ($null -ne $GitSummary) { [string]$GitSummary.Branch } else { "" }
+        CurrentHead = if ($null -ne $GitSummary) { [string]$GitSummary.Head } else { "" }
+        CurrentStatusSummary = if ($null -ne $GitSummary) { [string]$GitSummary.StatusSummary } else { "" }
+        RuntimeVersion = $runtimeVersion
+        DeployVersion = $deployVersion
+    }
+}
+
+function Show-ProjectResumeSummary {
+    param(
+        [object]$Project,
+        [object]$GitSummary,
+        [object]$TaskDigest,
+        [object]$ResumeState,
+        [object]$Validation,
+        [object]$SnapshotInfo
+    )
+
+    $projectLabel = Get-Label -Project $Project
+    $lastSession = if ($null -ne $ResumeState -and -not [string]::IsNullOrWhiteSpace([string]$ResumeState.codex_session_id)) { [string]$ResumeState.codex_session_id } else { "none" }
+    $branch = if ($null -ne $GitSummary) { [string]$GitSummary.Branch } else { "unknown" }
+    $statusSummary = if ($null -ne $GitSummary) { [string]$GitSummary.StatusSummary } else { "unknown" }
+    $runtimeText = "unknown"
+    if ($null -ne $SnapshotInfo) {
+        $runtimeVersion = ""
+        $deployVersion = 0
+        if ($SnapshotInfo.PSObject.Properties["apps_script_version"]) { $runtimeVersion = [string]$SnapshotInfo.apps_script_version }
+        if ($SnapshotInfo.PSObject.Properties["apps_script_deploy_version_number"]) { $deployVersion = [int]$SnapshotInfo.apps_script_deploy_version_number }
+        if ([string]::IsNullOrWhiteSpace($runtimeVersion) -and $SnapshotInfo.PSObject.Properties["version"]) { $runtimeVersion = [string]$SnapshotInfo.version }
+        if ($deployVersion -le 0 -and $SnapshotInfo.PSObject.Properties["deployVersion"]) { $deployVersion = [int]$SnapshotInfo.deployVersion }
+        if (-not [string]::IsNullOrWhiteSpace($runtimeVersion) -or $deployVersion -gt 0) {
+            $runtimeText = "{0} / {1}" -f $(if ([string]::IsNullOrWhiteSpace($runtimeVersion)) { "-" } else { $runtimeVersion }), $(if ($deployVersion -gt 0) { $deployVersion } else { "-" })
+        }
+    }
+
+    Write-Host ""
+    Write-Host "Resume Summary" -ForegroundColor Cyan
+    Write-Host ("Project: {0}" -f $projectLabel)
+    Write-Host ("Last session: {0}" -f $lastSession)
+    Write-Host ("Branch: {0}" -f $branch)
+    Write-Host ("Git status: {0}" -f $statusSummary)
+    Write-Host ("CURRENT_TASK.md: {0}" -f $(if ($null -ne $TaskDigest -and $TaskDigest.Exists) { $TaskDigest.Timestamp } else { "missing" }))
+    Write-Host ("Last runtime/version: {0}" -f $runtimeText)
+    Write-Host ("Drift state: {0}" -f $Validation.State) -ForegroundColor $(if ($Validation.State -eq "CLEAN") { "Green" } elseif ($Validation.State -eq "WARNING") { "Yellow" } else { "Red" })
+    Write-Host ("Recommended next launch mode: {0}" -f $Validation.RecommendedMode)
+    if ($Validation.CrossMachine) {
+        Write-Host "CROSS-MACHINE RESUME" -ForegroundColor Yellow
+    }
+    if ($Validation.Reasons.Count -gt 0) {
+        Write-Host ("Notes: {0}" -f ($Validation.Reasons -join " | "))
+    }
+    Write-Host ""
+}
+
+function Get-ProjectFreshLaunchBootstrap {
+    param(
+        [object]$Project,
+        [string]$ProjectPath,
+        [string]$PromptPath,
+        [object]$LaunchContext
+    )
+
+    $projectNameLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $Project.name
+    $displayNameLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value (Get-Label -Project $Project)
+    $projectPathLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $ProjectPath
+    $contextLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $Project.startup_context
+    $promptPathLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $PromptPath
+
+    return @"
+`$projectName = $projectNameLiteral
+`$displayName = $displayNameLiteral
+`$projectPath = $projectPathLiteral
+`$startupContext = $contextLiteral
+`$promptPath = $promptPathLiteral
+`$liteOpsFiles = @('CURRENT_TASK.md', 'DECISIONS.md', 'KNOWN_GOOD_STATE.md')
+
+Set-Location -LiteralPath `$projectPath
+
+Write-Host '=================================' -ForegroundColor DarkCyan
+Write-Host " `$displayName" -ForegroundColor Cyan
+Write-Host '=================================' -ForegroundColor DarkCyan
+Write-Host "Active project root: $($LaunchContext.ActiveProjectRoot)" -ForegroundColor DarkCyan
+Write-Host "Selected project: $($LaunchContext.SelectedProject)" -ForegroundColor DarkCyan
+Write-Host "Resolved project path: `$projectPath" -ForegroundColor DarkCyan
+Write-Host "Path source: $($LaunchContext.PathSource)" -ForegroundColor DarkCyan
+if ($($LaunchContext.ConfiguredMissing.ToString().ToLowerInvariant())) {
+    Write-Host 'Configured registry path is missing on this machine; resolved path used instead.' -ForegroundColor Yellow
+}
+Write-Host "Path: `$projectPath" -ForegroundColor Gray
+Write-Host "Context: `$startupContext" -ForegroundColor DarkGray
+Write-Host ''
+
+foreach (`$fileName in `$liteOpsFiles) {
+    `$filePath = Join-Path -Path `$projectPath -ChildPath `$fileName
+    Write-Host `$fileName -ForegroundColor Magenta
+    Write-Host ('-' * `$fileName.Length) -ForegroundColor DarkMagenta
+    if (Test-Path -LiteralPath `$filePath) {
+        Get-Content -LiteralPath `$filePath -Encoding utf8
+    } else {
+        Write-Host 'missing' -ForegroundColor Yellow
+    }
+    Write-Host ''
+}
+
+if (Test-Path -LiteralPath '.\.git') {
+    Write-Host 'git status -sb' -ForegroundColor Magenta
+    Write-Host '--------------' -ForegroundColor DarkMagenta
+    git status -sb
+    Write-Host ''
+}
+
+if (Get-Command codex -ErrorAction SilentlyContinue) {
+    if (Test-Path -LiteralPath `$promptPath) {
+        `$initialPrompt = Get-Content -LiteralPath `$promptPath -Raw -Encoding utf8
+        if (-not [string]::IsNullOrWhiteSpace(`$initialPrompt)) {
+            & codex `$initialPrompt
+        } else {
+            & codex
+        }
+    } else {
+        & codex
+    }
+} else {
+    Write-Host 'codex CLI not found in PATH. Shell opened at project root.' -ForegroundColor Yellow
+}
+"@
+}
+
+function Get-ProjectResumeLaunchBootstrap {
+    param(
+        [object]$Project,
+        [string]$ProjectPath,
+        [string]$PromptPath,
+        [object]$LaunchContext,
+        [string]$ResumeSessionId
+    )
+
+    $freshBootstrap = Get-ProjectFreshLaunchBootstrap -Project $Project -ProjectPath $ProjectPath -PromptPath $PromptPath -LaunchContext $LaunchContext
+    $resumeSessionLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $ResumeSessionId
+
+    return @"
+`$projectPath = $(ConvertTo-SingleQuotedPowerShellLiteral -Value $ProjectPath)
+Set-Location -LiteralPath `$projectPath
+
+Write-Host '=================================' -ForegroundColor DarkCyan
+Write-Host " $(Get-Label -Project $Project)" -ForegroundColor Cyan
+Write-Host '=================================' -ForegroundColor DarkCyan
+Write-Host "Resume session: $ResumeSessionId" -ForegroundColor Cyan
+Write-Host "Active project root: $($LaunchContext.ActiveProjectRoot)" -ForegroundColor DarkCyan
+Write-Host "Selected project: $($LaunchContext.SelectedProject)" -ForegroundColor DarkCyan
+Write-Host "Resolved project path: `$projectPath" -ForegroundColor DarkCyan
+Write-Host "Path source: $($LaunchContext.PathSource)" -ForegroundColor DarkCyan
+if ($($LaunchContext.ConfiguredMissing.ToString().ToLowerInvariant())) {
+    Write-Host 'Configured registry path is missing on this machine; resolved path used instead.' -ForegroundColor Yellow
+}
+Write-Host ''
+
+if (Get-Command codex -ErrorAction SilentlyContinue) {
+    & codex resume $resumeSessionLiteral
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host 'RESUME STATE DRIFT DETECTED' -ForegroundColor Yellow
+        Write-Host 'Codex resume failed; falling back to fresh reconstruction.' -ForegroundColor Yellow
+$freshBootstrap
+    }
+} else {
+    Write-Host 'codex CLI not found in PATH. Falling back to fresh reconstruction.' -ForegroundColor Yellow
+$freshBootstrap
+}
+"@
+}
+
+function Start-ProjectLaunch {
+    param(
+        [object]$Project,
+        [string]$ProjectPath,
+        [object]$LaunchContext,
+        [string]$LaunchMode,
+        [object]$Validation,
+        [object]$TaskDigest,
+        [object]$SnapshotInfo,
+        [object]$ResumeState
+    )
+
+    $promptPath = Get-PromptPath -ProjectName $Project.name
+    $bootstrap = $null
+    if ($LaunchMode -eq "resume" -and $Validation.State -eq "CLEAN" -and $Validation.ResumeAvailable) {
+        $bootstrap = Get-ProjectResumeLaunchBootstrap -Project $Project -ProjectPath $ProjectPath -PromptPath $promptPath -LaunchContext $LaunchContext -ResumeSessionId $Validation.SavedSessionId
+    } else {
+        if ($LaunchMode -eq "resume" -and $Validation.State -ne "CLEAN") {
+            Write-Host "RESUME STATE DRIFT DETECTED" -ForegroundColor Yellow
+            Write-Host ("Drift state: {0}" -f $Validation.State) -ForegroundColor Yellow
+            if ($Validation.Reasons.Count -gt 0) {
+                Write-Host ("Reasons: {0}" -f ($Validation.Reasons -join " | ")) -ForegroundColor Yellow
+            }
+        }
+        $bootstrap = Get-ProjectFreshLaunchBootstrap -Project $Project -ProjectPath $ProjectPath -PromptPath $promptPath -LaunchContext $LaunchContext
+    }
+
+    Start-Process powershell.exe -ArgumentList @(
+        "-NoExit",
+        "-ExecutionPolicy", "Bypass",
+        "-Command", $bootstrap
+    ) | Out-Null
+}
+
+function Read-ProjectLaunchMode {
+    param([object]$Validation)
+
+    Write-Host "Launch mode: [A]uto (recommended)  [R]esume prior Codex session  [F]Fresh reconstruction"
+    $answer = Read-ConsoleInput "Select launch mode"
+    if ([string]::IsNullOrWhiteSpace($answer)) {
+        return "auto"
+    }
+
+    switch -Regex ($answer.Trim()) {
+        '^[Rr]$' { return "resume" }
+        '^[Ff]$' { return "fresh" }
+        default { return "auto" }
     }
 }
 
@@ -834,7 +1331,9 @@ function Show-HandoffReport {
     param(
         [object]$Project,
         [object]$Status,
-        [object]$SnapshotInfo
+        [object]$SnapshotInfo,
+        [object]$ResumeState,
+        [object]$Validation
     )
 
     $projectLabel = Get-Label -Project $Project
@@ -871,6 +1370,9 @@ function Show-HandoffReport {
     } else {
         "Not detected."
     }
+    $savedSessionId = if ($null -ne $ResumeState -and -not [string]::IsNullOrWhiteSpace([string]$ResumeState.codex_session_id)) { [string]$ResumeState.codex_session_id } else { "not saved" }
+    $driftState = if ($null -ne $Validation) { [string]$Validation.State } else { "unknown" }
+    $launchMode = if ($null -ne $Validation) { [string]$Validation.RecommendedMode } else { "reconstruct" }
     $notes = New-Object System.Collections.Generic.List[string]
     if ($null -ne $Status) {
         if (-not $Status.path_exists) {
@@ -902,6 +1404,9 @@ function Show-HandoffReport {
     Write-Host ("CURRENT_TASK.md check: {0}" -f $taskCheck)
     Write-Host ("Handoff file: {0}" -f $handoffLocation) -ForegroundColor Cyan
     Write-Host ("Snapshot/checklist: {0}" -f $snapshotLocation) -ForegroundColor DarkCyan
+    Write-Host ("Codex session ID saved: {0}" -f $savedSessionId)
+    Write-Host ("Drift state: {0}" -f $driftState)
+    Write-Host ("Recommended next launch mode: {0}" -f $launchMode)
     Write-Host ("Next recommended resume command: {0}" -f $resumeCommand) -ForegroundColor DarkCyan
     Write-Host ""
     Write-Host "Resume Block" -ForegroundColor Cyan
@@ -911,7 +1416,7 @@ function Show-HandoffReport {
     Write-Host ("Git status: {0}" -f $gitStatusSummary)
     Write-Host ("Last completed action: {0}" -f $lastCompletedAction)
     Write-Host ("Pending next action: {0}" -f $pendingNextAction)
-    Write-Host ("Resume readiness: {0}" -f (Get-ResumeReadiness -Status $Status)) -ForegroundColor Cyan
+    Write-Host ("Resume readiness: {0}" -f $(if ($null -ne $Validation) { $Validation.State } else { (Get-ResumeReadiness -Status $Status) })) -ForegroundColor Cyan
     Write-Host ("Notes: {0}" -f ($notes -join " | "))
     Write-Host ""
 }
@@ -1010,76 +1515,32 @@ function Open-Proj {
     Set-LastProjectName -Name $Project.name
     Add-RecentProject -Project $Project
 
-    $projectNameLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $Project.name
-    $displayNameLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value (Get-Label -Project $Project)
-    $projectPathLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $projectPath
-    $contextLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $Project.startup_context
-    $promptPathLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value (Get-PromptPath -ProjectName $Project.name)
+    $taskDigest = Get-ProjectCurrentTaskDigest -ProjectPath $projectPath
+    $gitSummary = Get-ProjectGitSummary -ProjectPath $projectPath
+    $snapshotInfo = Get-ProjectSnapshotInfo -ProjectName $Project.name
+    $resumeState = Load-ProjectResumeState -ProjectName $Project.name
+    $validation = Get-ProjectResumeValidation -Project $Project -GitSummary $gitSummary -TaskDigest $taskDigest -ResumeState $resumeState -SnapshotInfo $snapshotInfo
 
-    $bootstrap = @"
-`$projectName = $projectNameLiteral
-`$displayName = $displayNameLiteral
-`$projectPath = $projectPathLiteral
-`$startupContext = $contextLiteral
-`$promptPath = $promptPathLiteral
-`$liteOpsFiles = @('CURRENT_TASK.md', 'DECISIONS.md', 'KNOWN_GOOD_STATE.md')
+    Show-ProjectResumeSummary -Project $Project -GitSummary $gitSummary -TaskDigest $taskDigest -ResumeState $resumeState -Validation $validation -SnapshotInfo $snapshotInfo
 
-Set-Location -LiteralPath `$projectPath
-
-Write-Host '=================================' -ForegroundColor DarkCyan
-Write-Host " `$displayName" -ForegroundColor Cyan
-Write-Host '=================================' -ForegroundColor DarkCyan
-Write-Host "Active project root: $($launchContext.ActiveProjectRoot)" -ForegroundColor DarkCyan
-Write-Host "Selected project: $($launchContext.SelectedProject)" -ForegroundColor DarkCyan
-Write-Host "Resolved project path: `$projectPath" -ForegroundColor DarkCyan
-Write-Host "Path source: $($launchContext.PathSource)" -ForegroundColor DarkCyan
-if ($($launchContext.ConfiguredMissing.ToString().ToLowerInvariant())) {
-    Write-Host 'Configured registry path is missing on this machine; resolved path used instead.' -ForegroundColor Yellow
-}
-Write-Host "Path: `$projectPath" -ForegroundColor Gray
-Write-Host "Context: `$startupContext" -ForegroundColor DarkGray
-Write-Host ''
-
-foreach (`$fileName in `$liteOpsFiles) {
-    `$filePath = Join-Path -Path `$projectPath -ChildPath `$fileName
-    Write-Host `$fileName -ForegroundColor Magenta
-    Write-Host ('-' * `$fileName.Length) -ForegroundColor DarkMagenta
-    if (Test-Path -LiteralPath `$filePath) {
-        Get-Content -LiteralPath `$filePath -Encoding utf8
-    } else {
-        Write-Host 'missing' -ForegroundColor Yellow
-    }
-    Write-Host ''
-}
-
-if (Test-Path -LiteralPath '.\.git') {
-    Write-Host 'git status -sb' -ForegroundColor Magenta
-    Write-Host '--------------' -ForegroundColor DarkMagenta
-    git status -sb
-    Write-Host ''
-}
-
-if (Get-Command codex -ErrorAction SilentlyContinue) {
-    if (Test-Path -LiteralPath `$promptPath) {
-        `$initialPrompt = Get-Content -LiteralPath `$promptPath -Raw -Encoding utf8
-        if (-not [string]::IsNullOrWhiteSpace(`$initialPrompt)) {
-            & codex `$initialPrompt
+    $launchMode = Read-ProjectLaunchMode -Validation $validation
+    if ($launchMode -eq "auto") {
+        if ($validation.State -eq "CLEAN") {
+            $launchMode = "resume"
         } else {
-            & codex
+            $launchMode = "fresh"
         }
-    } else {
-        & codex
     }
-} else {
-    Write-Host 'codex CLI not found in PATH. Shell opened at project root.' -ForegroundColor Yellow
-}
-"@
 
-    Start-Process powershell.exe -ArgumentList @(
-        "-NoExit",
-        "-ExecutionPolicy", "Bypass",
-        "-Command", $bootstrap
-    ) | Out-Null
+    if ($launchMode -eq "resume" -and $validation.State -ne "CLEAN") {
+        Write-Host "RESUME STATE DRIFT DETECTED" -ForegroundColor Yellow
+        if ($validation.Reasons.Count -gt 0) {
+            Write-Host ("Reasons: {0}" -f ($validation.Reasons -join " | ")) -ForegroundColor Yellow
+        }
+        $launchMode = "fresh"
+    }
+
+    Start-ProjectLaunch -Project $Project -ProjectPath $projectPath -LaunchContext $launchContext -LaunchMode $launchMode -Validation $validation -TaskDigest $taskDigest -SnapshotInfo $snapshotInfo -ResumeState $resumeState
 }
 
 function Open-ProjInCodexApp {
@@ -1257,7 +1718,33 @@ function Invoke-Handoff {
     $shouldExit = ($LASTEXITCODE -eq 10)
     $status = Get-ProjectStatusFromTool -ProjectPath $projectPath -ProjectName $Project.name
     $snapshotInfo = Get-ProjectSnapshotInfo -ProjectName $Project.name
-    Show-HandoffReport -Project $Project -Status $status -SnapshotInfo $snapshotInfo
+    $taskDigest = Get-ProjectCurrentTaskDigest -ProjectPath $projectPath
+    $gitSummary = Get-ProjectGitSummary -ProjectPath $projectPath
+    $resumeState = Load-ProjectResumeState -ProjectName $Project.name
+    $validation = Get-ProjectResumeValidation -Project $Project -GitSummary $gitSummary -TaskDigest $taskDigest -ResumeState $resumeState -SnapshotInfo $snapshotInfo
+    $codexSessionId = Get-CodexSessionId
+    $savedState = [pscustomobject]@{
+        project = $Project.name
+        repo_path = $projectPath
+        codex_session_id = $codexSessionId
+        timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        branch = [string]$gitSummary.Branch
+        git_head = [string]$gitSummary.Head
+        git_status_summary = [string]$gitSummary.StatusSummary
+        current_task_hash = [string]$taskDigest.Hash
+        current_task_timestamp = [string]$taskDigest.Timestamp
+        machine_name = [string]$env:COMPUTERNAME
+        last_shutdown_status = $(if ($shouldExit) { "EXIT" } else { "RETURN" })
+        drift_state = [string]$validation.State
+        resume_readiness = [string]$validation.State
+        recommended_next_launch_mode = [string]$validation.RecommendedMode
+        runtime_version = [string]$validation.RuntimeVersion
+        deploy_version_number = [int]$validation.DeployVersion
+        codex_resume_command = [string]$validation.ResumeCommand
+    }
+    Save-ProjectResumeState -State $savedState -ProjectName $Project.name | Out-Null
+    $resumeState = Load-ProjectResumeState -ProjectName $Project.name
+    Show-HandoffReport -Project $Project -Status $status -SnapshotInfo $snapshotInfo -ResumeState $resumeState -Validation $validation
 
     if (-not $shouldExit) {
         $exitAnswer = Read-ConsoleInput "Exit CodexHub now? Y/N"

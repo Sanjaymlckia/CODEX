@@ -46,6 +46,7 @@ The launcher menu prints each project name, resolved path, source (`override`, `
 - `.codex\` - visible rule inventory and status files
 - `state\machine_profile.json` - machine-aware preferred project root and optional local project path overrides
 - `state\last_project.txt` and `state\recent_projects.json` - launcher memory
+- `state\<PROJECT>_resume_state.json` - per-project Codex resume session state and validation metadata
 - `COMMAND_LIBRARY.md` - short command reference
 - `CURRENT_TASK.md` - current hub maintenance objective
 
@@ -67,6 +68,14 @@ The launcher menu prints each project name, resolved path, source (`override`, `
 - `O` - open the hub root
 - `V` - initialize CODEX LITE OPS files
 - `0` - exit
+
+Project open uses hybrid resume by default:
+
+1. The launcher reads the per-project resume state file when present.
+2. It validates repo path, git state, `CURRENT_TASK.md`, and machine name.
+3. If validation is `CLEAN`, it offers the native `codex resume <SESSION_ID>` path.
+4. If validation is `WARNING` or `BLOCKED`, it falls back to fresh reconstruction from `CURRENT_TASK.md`.
+5. Operators can choose `A` auto, `R` resume, or `F` fresh reconstruction at launch time.
 
 The launcher prints the active root and resolved project path before launching. If Codex Desktop does not open the requested workspace automatically, use the printed path.
 

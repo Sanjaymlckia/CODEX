@@ -16,11 +16,13 @@ Default report:
 3. Current task summary.
 4. `CURRENT_TASK.md` update/check result.
 5. Snapshot/checklist location if created.
-6. Dirty or untracked files.
-7. Stale-state findings.
-8. Recommended `CURRENT_TASK.md` update, if any.
-9. Next exact command.
-10. Final concise resume block:
+6. Resume state file location and saved Codex session ID, if created.
+7. Drift state: `CLEAN`, `WARNING`, or `BLOCKED`.
+8. Dirty or untracked files.
+9. Stale-state findings.
+10. Recommended `CURRENT_TASK.md` update, if any.
+11. Next exact command.
+12. Final concise resume block:
    - Project
    - Machine
    - Path
@@ -28,4 +30,5 @@ Default report:
    - Last completed action
    - Pending next action
    - Resume readiness: READY / BLOCKED
+   - Recommended next launch mode: resume / reconstruct
    - Notes

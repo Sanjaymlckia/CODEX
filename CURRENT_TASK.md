@@ -1,6 +1,6 @@
 # CURRENT TASK
 
-- Objective: Keep the CODEX Hub launcher portable across machines with different `CODEX_PROJECTS` drive letters.
+- Objective: Keep the CODEX Hub launcher portable across machines with different `CODEX_PROJECTS` drive letters while supporting hybrid Codex resume governance.
 - Completed:
   - Fixed launcher input responsiveness and deterministic exit handling.
   - Added minimal Lite Ops display and initialization support.
@@ -60,3 +60,8 @@
   - Because the child pause was not owned by the parent launcher, shutdown could appear silent and consume an extra Enter before control visibly returned.
   - Fix scope is hub-only and generic for all projects: parent launcher now owns optional note capture, final shutdown report, explicit exit choice, and explicit `Press Enter to return to CodexHub menu` prompt.
   - Auto-handoff file and snapshot generation remain in the existing tool path under `state\handoffs` and `state\*_snapshot.json`.
+- Hybrid resume governance update (2026-05-11):
+  - Launcher startup now reads `state\<PROJECT>_resume_state.json` when present and validates repo path, git state, `CURRENT_TASK.md`, and machine name before trusting a saved Codex session.
+  - Resume drift is classified as `CLEAN`, `WARNING`, or `BLOCKED`; only clean state uses native `codex resume <SESSION_ID>` automatically.
+  - Warning or blocked state falls back to reconstruction from `CURRENT_TASK.md` instead of trusting session memory.
+  - Shutdown now persists the current Codex thread ID, git summary, current task hash/timestamp, machine name, drift state, and recommended next launch mode for the next session.
