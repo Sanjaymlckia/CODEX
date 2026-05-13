@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet("LIGHT", "FULL_AUDIT")]
     [string]$OperationalMode = ""
 )
@@ -1914,3 +1914,4 @@ while ($true) {
         }
     }
 }
+
