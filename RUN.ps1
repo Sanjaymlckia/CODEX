@@ -1218,10 +1218,13 @@ function Start-ProjectLaunch {
         $bootstrap = Get-ProjectFreshLaunchBootstrap -Project $Project -ProjectPath $ProjectPath -PromptPath $promptPath -LaunchContext $LaunchContext
     }
 
+    $lastBootstrapPath = Join-Path -Path (Get-StateRoot) -ChildPath "last_child_bootstrap.ps1"
+    Set-Content -LiteralPath $lastBootstrapPath -Value $bootstrap -Encoding utf8
+
     Start-Process powershell.exe -ArgumentList @(
         "-NoExit",
         "-ExecutionPolicy", "Bypass",
-        "-Command", $bootstrap
+        "-File", $lastBootstrapPath
     ) | Out-Null
 }
 
