@@ -18,11 +18,11 @@ Keep the CODEX Hub launcher portable across machines with different `CODEX_PROJE
 
 ## Next Action
 
-- Validate launcher startup output and confirm LIGHT mode reduces startup context without weakening resume or release safety.
+- Validate root-authority normalization startup output and confirm LIGHT mode now shows `MODE: LIGHT` and `AUTH ROOT: E:\Gdrive\01 SANJAY\Codex_Sync` without fallback authority drift.
 
 ## Latest Accepted Release
 
-- Current accepted hub baseline includes portable root resolution, hybrid resume governance, and this LIGHT mode launcher discipline update dated `2026-05-13`.
+- Current accepted hub baseline includes portable root resolution, hybrid resume governance, LIGHT mode launcher discipline, and root-authority normalization dated `2026-05-13`.
 
 ## Session History
 
@@ -107,3 +107,11 @@ Keep the CODEX Hub launcher portable across machines with different `CODEX_PROJE
   - `tools\project-status.ps1` now prefers authoritative current-task sections: current runtime, active blockers/risks, next action, and latest accepted release.
   - FULL_AUDIT preserves broader current-task and audit inspection when explicitly requested.
   - No project runtimes, deployments, Apps Script behavior, or cloud dependencies were modified.
+- Root authority normalization update (2026-05-13):
+  - Added `authoritative_root` to `projects\projects.json` and normalized the launcher to treat `E:\Gdrive\01 SANJAY\Codex_Sync` as the single authority root.
+  - Resolution order is now explicit project path, authoritative root, then deprecated legacy fallback roots as recovery hints only.
+  - Startup now prints `MODE: LIGHT` and `AUTH ROOT: E:\Gdrive\01 SANJAY\Codex_Sync`.
+  - `state\last_project_root.txt` is rewritten to the authoritative root during startup initialization.
+  - Resume-state normalization rewrites stale `C:\CODEX_PROJECTS` or `D:\CODEX_PROJECTS` references to the authoritative root only when the authoritative candidate exists.
+  - Metadata persistence is refused when multiple valid roots are detected for the same repo and the launcher reports `ROOT AUTHORITY CONFLICT`.
+  - Project health no longer turns `AMBER` merely because a deprecated fallback path was used.

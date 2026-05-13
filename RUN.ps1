@@ -17,6 +17,7 @@ function Get-Root {
 function Get-RegPath { Join-Path -Path (Get-Root) -ChildPath "projects\projects.json" }
 function Get-StateRoot { Join-Path -Path (Get-Root) -ChildPath "state" }
 function Get-LastPath { Join-Path -Path (Get-StateRoot) -ChildPath "last_project.txt" }
+function Get-LastProjectRootPath { Join-Path -Path (Get-StateRoot) -ChildPath "last_project_root.txt" }
 function Get-LocalMachineProfilePath { Join-Path -Path (Get-StateRoot) -ChildPath "local\machine.local.json" }
 function Get-RecentPath { Join-Path -Path (Get-StateRoot) -ChildPath "recent_projects.json" }
 function Get-PromptsRoot { Join-Path -Path (Get-Root) -ChildPath "prompts" }
@@ -102,7 +103,7 @@ function ConvertTo-ProjectRecord {
     }
 }
 
-function Load-Reg {
+function Get-RegistryConfig {
     $regPath = Get-RegPath
     if (-not (Test-Path -LiteralPath $regPath)) {
         throw "Project registry not found: $regPath"
@@ -110,7 +111,28 @@ function Load-Reg {
 
     $raw = Get-Content -LiteralPath $regPath -Raw -Encoding utf8
     $parsed = $raw | ConvertFrom-Json -ErrorAction Stop
-    return @($parsed | ForEach-Object { ConvertTo-ProjectRecord $_ } | Where-Object { $null -ne $_ })
+
+    if ($parsed -is [System.Array]) {
+        return [pscustomobject]@{
+            authoritative_root = Get-CodexSyncRoot
+            projects = @($parsed)
+        }
+    }
+
+    $projects = @()
+    if ($null -ne $parsed.PSObject.Properties["projects"]) {
+        $projects = @($parsed.projects)
+    }
+
+    return [pscustomobject]@{
+        authoritative_root = if ($null -ne $parsed.PSObject.Properties["authoritative_root"]) { [string]$parsed.authoritative_root } else { Get-CodexSyncRoot }
+        projects = $projects
+    }
+}
+
+function Load-Reg {
+    $config = Get-RegistryConfig
+    return @($config.projects | ForEach-Object { ConvertTo-ProjectRecord $_ } | Where-Object { $null -ne $_ })
 }
 
 function Get-ProjectsByStatus {
@@ -236,7 +258,10 @@ function Save-Reg {
 
     $regPath = Get-RegPath
     Ensure-ParentDirectory -Path $regPath
-    @($Projects) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $regPath -Encoding utf8
+    [pscustomobject]@{
+        authoritative_root = Get-AuthoritativeRoot
+        projects = @($Projects)
+    } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $regPath -Encoding utf8
 }
 
 function Add-RecentProject {
@@ -357,13 +382,85 @@ function Get-CurrentTaskPath {
     return Join-Path -Path $projectPath -ChildPath "CURRENT_TASK.md"
 }
 
+function Get-AuthoritativeRoot {
+    $config = Get-RegistryConfig
+    $root = if ($null -ne $config -and $null -ne $config.PSObject.Properties["authoritative_root"]) { [string]$config.authoritative_root } else { "" }
+    if ([string]::IsNullOrWhiteSpace($root)) {
+        return Get-CodexSyncRoot
+    }
+
+    return $root.TrimEnd("\")
+}
+
 function Get-ActiveProjectRoot {
-    $syncRoot = Get-CodexSyncRoot
+    $syncRoot = Get-AuthoritativeRoot
     if ([string]::IsNullOrWhiteSpace($syncRoot) -or -not (Test-Path -LiteralPath $syncRoot)) {
         return ""
     }
 
     return $syncRoot
+}
+
+function Get-LegacyFallbackRoots {
+    return @(
+        "D:\CODEX_PROJECTS",
+        "C:\CODEX_PROJECTS"
+    )
+}
+
+function Get-AuthorityCandidatePath {
+    param(
+        [string]$Root,
+        [string]$RelativePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Root) -or [string]::IsNullOrWhiteSpace($RelativePath)) {
+        return ""
+    }
+
+    return (Join-Path -Path $Root.TrimEnd("\") -ChildPath $RelativePath)
+}
+
+function Test-DeprecatedRootPath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return $false
+    }
+
+    return $Path -match '^[Cc]:\\CODEX_PROJECTS(\\|$)'
+}
+
+function Get-NormalizedResumeRepoPath {
+    param(
+        [object]$Project,
+        [string]$SavedRepoPath
+    )
+
+    if ($null -eq $Project -or [string]::IsNullOrWhiteSpace($SavedRepoPath)) {
+        return $SavedRepoPath
+    }
+
+    $relativePath = Get-ProjectRelativePath -ConfiguredPath $Project.path
+    $authoritativeCandidate = Get-AuthorityCandidatePath -Root (Get-AuthoritativeRoot) -RelativePath $relativePath
+    if (-not [string]::IsNullOrWhiteSpace($authoritativeCandidate) -and
+        (Test-Path -LiteralPath $authoritativeCandidate) -and
+        $SavedRepoPath -match '^[CDcd]:\\CODEX_PROJECTS(\\|$)') {
+        return $authoritativeCandidate
+    }
+
+    return $SavedRepoPath
+}
+
+function Initialize-AuthorityState {
+    $authorityRoot = Get-AuthoritativeRoot
+    if ([string]::IsNullOrWhiteSpace($authorityRoot)) {
+        return
+    }
+
+    $lastProjectRootPath = Get-LastProjectRootPath
+    Ensure-ParentDirectory -Path $lastProjectRootPath
+    Set-Content -LiteralPath $lastProjectRootPath -Value $authorityRoot -Encoding utf8
 }
 
 function Get-ProjectRelativePath {
@@ -401,34 +498,79 @@ function Resolve-ProjectPathInfo {
     $configuredPath = $Project.path.Trim()
     $overridePath = Get-ProjectPathOverride -Project $Project
     $relativePath = Get-ProjectRelativePath -ConfiguredPath $configuredPath
-    $activeRoot = Get-ActiveProjectRoot
-    $source = "stale"
+    $authoritativeRoot = Get-AuthoritativeRoot
+    $authoritativePath = Get-AuthorityCandidatePath -Root $authoritativeRoot -RelativePath $relativePath
+    $legacyFallbackPaths = @(Get-LegacyFallbackRoots | ForEach-Object { Get-AuthorityCandidatePath -Root $_ -RelativePath $relativePath } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     $resolvedPath = ""
-    $reason = "Configured registry path is stale on this machine."
+    $source = "missing"
+    $reason = "Project path could not be resolved."
+    $authorityConflict = $false
+    $existingCandidates = New-Object System.Collections.Generic.List[string]
 
-    if (-not [string]::IsNullOrWhiteSpace($overridePath)) {
-        $resolvedPath = $overridePath
-        $source = "override"
-        if (-not (Test-Path -LiteralPath $resolvedPath)) {
-            $reason = "Local machine override path is missing."
-        } else {
-            $reason = ""
+    foreach ($candidate in @($configuredPath, $authoritativePath) + $legacyFallbackPaths) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) {
+            continue
         }
-    } elseif (-not [string]::IsNullOrWhiteSpace($activeRoot) -and -not [string]::IsNullOrWhiteSpace($relativePath)) {
-        $resolvedPath = Join-Path -Path $activeRoot -ChildPath $relativePath
-        $source = "sync-root"
-        if (-not (Test-Path -LiteralPath $resolvedPath)) {
-            $reason = "Derived sync-root path is missing."
-        } else {
-            $reason = ""
+
+        if ((Test-Path -LiteralPath $candidate) -and -not ($existingCandidates.Contains($candidate))) {
+            $existingCandidates.Add($candidate) | Out-Null
         }
+    }
+
+    if ($existingCandidates.Count -gt 1) {
+        $authorityConflict = $true
+    }
+
+    $candidates = @(
+        [pscustomobject]@{ Path = $overridePath; Source = "override"; Reason = "Local machine override path is missing."; Deprecated = $false },
+        [pscustomobject]@{ Path = $configuredPath; Source = "explicit"; Reason = "Explicit project path is missing."; Deprecated = $false },
+        [pscustomobject]@{ Path = $authoritativePath; Source = "authoritative"; Reason = "Authoritative root candidate is missing."; Deprecated = $false }
+    )
+    foreach ($fallbackPath in $legacyFallbackPaths) {
+        $deprecatedNote = if (Test-DeprecatedRootPath -Path $fallbackPath) { "Deprecated legacy root candidate is missing." } else { "Legacy fallback candidate is missing." }
+        $candidates += [pscustomobject]@{ Path = $fallbackPath; Source = "deprecated-fallback"; Reason = $deprecatedNote; Deprecated = $true }
+    }
+
+    foreach ($candidate in $candidates) {
+        if ([string]::IsNullOrWhiteSpace([string]$candidate.Path)) {
+            continue
+        }
+
+        if (-not (Test-Path -LiteralPath $candidate.Path)) {
+            $resolvedPath = [string]$candidate.Path
+            $source = [string]$candidate.Source
+            $reason = [string]$candidate.Reason
+            continue
+        }
+
+        $taskCandidate = Join-Path -Path $candidate.Path -ChildPath "CURRENT_TASK.md"
+        if (-not (Test-Path -LiteralPath $taskCandidate)) {
+            $resolvedPath = [string]$candidate.Path
+            $source = [string]$candidate.Source
+            $reason = "Resolved project path does not contain CURRENT_TASK.md."
+            continue
+        }
+
+        $resolvedPath = [string]$candidate.Path
+        $source = [string]$candidate.Source
+        $reason = ""
+        if ($candidate.Deprecated) {
+            $reason = "Using deprecated legacy fallback root as a recovery hint only."
+        }
+        break
     }
 
     $taskPath = if ([string]::IsNullOrWhiteSpace($resolvedPath)) { "" } else { Join-Path -Path $resolvedPath -ChildPath "CURRENT_TASK.md" }
     $taskExists = (-not [string]::IsNullOrWhiteSpace($taskPath)) -and (Test-Path -LiteralPath $taskPath)
     if ([string]::IsNullOrWhiteSpace($reason) -and -not $taskExists) {
-        $source = "stale"
+        $source = "missing"
         $reason = "Resolved project path does not contain CURRENT_TASK.md."
+    }
+    if ($authorityConflict) {
+        $reason = @(
+            "ROOT AUTHORITY CONFLICT",
+            $(if ([string]::IsNullOrWhiteSpace($reason)) { "Multiple roots detected for the same repo." } else { $reason })
+        ) -join " | "
     }
 
     return [pscustomobject]@{
@@ -440,6 +582,9 @@ function Resolve-ProjectPathInfo {
         TaskPath          = $taskPath
         TaskExists        = $taskExists
         Reason            = $reason
+        AuthorityRoot     = $authoritativeRoot
+        AuthorityConflict = $authorityConflict
+        ExistingCandidates = @($existingCandidates)
     }
 }
 
@@ -569,7 +714,10 @@ function Get-CodexSessionId {
 }
 
 function Load-ProjectResumeState {
-    param([string]$ProjectName)
+    param(
+        [string]$ProjectName,
+        [object]$Project = $null
+    )
 
     $statePath = Get-ProjectResumeStatePath -ProjectName $ProjectName
     if ([string]::IsNullOrWhiteSpace($statePath) -or -not (Test-Path -LiteralPath $statePath)) {
@@ -577,7 +725,20 @@ function Load-ProjectResumeState {
     }
 
     try {
-        return (Get-Content -LiteralPath $statePath -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop)
+        $resumeState = Get-Content -LiteralPath $statePath -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+        if ($null -ne $Project) {
+            $originalRepoPath = [string]$resumeState.repo_path
+            $normalizedRepoPath = Get-NormalizedResumeRepoPath -Project $Project -SavedRepoPath $originalRepoPath
+            if (-not [string]::Equals($originalRepoPath, $normalizedRepoPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $resumeState.repo_path = $normalizedRepoPath
+                $resumeState | Add-Member -NotePropertyName deprecated_root_reference -NotePropertyValue $false -Force
+                Save-ProjectResumeState -State $resumeState -ProjectName $ProjectName | Out-Null
+            } elseif (Test-DeprecatedRootPath -Path $originalRepoPath) {
+                $resumeState | Add-Member -NotePropertyName deprecated_root_reference -NotePropertyValue $true -Force
+            }
+        }
+
+        return $resumeState
     } catch {
         return $null
     }
@@ -614,7 +775,8 @@ function Get-ProjectResumeValidation {
     $crossMachine = $false
     $recommendedMode = "resume"
     $resumeCommand = ""
-    $projectPathValue = if ($null -ne $Project -and $null -ne $Project.PSObject.Properties["path"]) { [string]$Project.path } else { "" }
+    $pathInfo = if ($null -ne $Project) { Resolve-ProjectPathInfo -Project $Project } else { $null }
+    $projectPathValue = if ($null -ne $pathInfo) { [string]$pathInfo.Path } else { "" }
     $projectNameValue = if ($null -ne $Project -and $null -ne $Project.PSObject.Properties["name"]) { [string]$Project.name } else { "" }
     $currentTaskHash = if ($null -ne $TaskDigest) { [string]$TaskDigest.Hash } else { "" }
     $currentTaskTimestamp = if ($null -ne $TaskDigest) { [string]$TaskDigest.Timestamp } else { "" }
@@ -688,6 +850,10 @@ function Get-ProjectResumeValidation {
     if (-not [string]::IsNullOrWhiteSpace($savedRepoPath) -and -not [string]::Equals($savedRepoPath, $projectPathValue, [System.StringComparison]::OrdinalIgnoreCase)) {
         $state = "BLOCKED"
         $reasons.Add("Saved repo path does not match the selected project path.") | Out-Null
+    }
+    if ($null -ne $pathInfo -and $pathInfo.AuthorityConflict) {
+        $state = "BLOCKED"
+        $reasons.Add("ROOT AUTHORITY CONFLICT") | Out-Null
     }
 
     if (-not [string]::IsNullOrWhiteSpace($savedMachineName) -and -not [string]::Equals($savedMachineName, $machineName, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -903,6 +1069,7 @@ Write-Host '=================================' -ForegroundColor DarkCyan
 Write-Host " `$displayName" -ForegroundColor Cyan
 Write-Host '=================================' -ForegroundColor DarkCyan
 Write-Host "MODE: `$operationalMode" -ForegroundColor Cyan
+Write-Host "AUTH ROOT: $($LaunchContext.CodexSyncRoot)" -ForegroundColor Cyan
 Write-Host "Token discipline active: $(if (`$operationalMode -eq 'LIGHT') { 'YES' } else { 'NO - FULL AUDIT' })" -ForegroundColor DarkCyan
 Write-Host "CodexHub root: $($LaunchContext.CodexHubRoot)" -ForegroundColor DarkCyan
 Write-Host "Codex_Sync root: $($LaunchContext.CodexSyncRoot)" -ForegroundColor DarkCyan
@@ -1076,6 +1243,7 @@ function Read-ProjectLaunchMode {
 
 $script:CodexHubOperationalMode = Resolve-OperationalMode -RequestedMode $OperationalMode
 $script:CodexHubModeSettings = Get-OperationalModeSettings -Mode $script:CodexHubOperationalMode
+Initialize-AuthorityState
 
 function Get-LastHandoffInfo {
     param(
@@ -1135,25 +1303,14 @@ function Get-ProjectHealth {
     )
 
     if ($null -eq $PathInfo -or [string]::IsNullOrWhiteSpace($PathInfo.Path) -or -not (Test-Path -LiteralPath $PathInfo.Path)) {
-        return "RED"
+        return "AMBER"
     }
 
-    if ($GitSummary.Detached) {
-        return "RED"
+    if ($null -eq $GitSummary -or [string]::Equals([string]$GitSummary.State, "NO-GIT", [System.StringComparison]::OrdinalIgnoreCase) -or $GitSummary.Detached) {
+        return "AMBER"
     }
 
     if (-not (Test-Path -LiteralPath (Join-Path -Path $PathInfo.Path -ChildPath "CURRENT_TASK.md"))) {
-        return "RED"
-    }
-
-    $governanceFiles = @("AGENTS.md", "KNOWN_GOOD_STATE.md")
-    foreach ($fileName in $governanceFiles) {
-        if (-not (Test-Path -LiteralPath (Join-Path -Path $PathInfo.Path -ChildPath $fileName))) {
-            return "AMBER"
-        }
-    }
-
-    if ($GitSummary.DirtyCount -gt 0 -or $HandoffInfo.Hours -gt 24) {
         return "AMBER"
     }
 
@@ -1424,7 +1581,8 @@ function Show-Header {
     Write-Host "=============================================" -ForegroundColor DarkCyan
     Write-Host "               CODEX HUB LAUNCHER            " -ForegroundColor Cyan
     Write-Host "=============================================" -ForegroundColor DarkCyan
-    Write-Host (" Mode: {0}" -f $script:CodexHubModeSettings.Mode) -ForegroundColor Cyan
+    Write-Host (" MODE: {0}" -f $script:CodexHubModeSettings.Mode) -ForegroundColor Cyan
+    Write-Host (" AUTH ROOT: {0}" -f $syncRoot) -ForegroundColor Cyan
     Write-Host (" Token discipline: {0}" -f $(if ($script:CodexHubModeSettings.TokenDisciplineActive) { "ACTIVE" } else { "FULL AUDIT" })) -ForegroundColor DarkCyan
     Write-Host (" Active: {0}   Deprecated: {1}   Archived: {2}" -f $active, $deprecated, $archived) -ForegroundColor Gray
     Write-Host (" CodexHub root: {0}" -f $hubRoot) -ForegroundColor DarkCyan
@@ -1466,7 +1624,7 @@ function Open-Proj {
     $taskDigest = Get-ProjectCurrentTaskDigest -ProjectPath $projectPath
     $gitSummary = Get-ProjectGitSummary -ProjectPath $projectPath
     $snapshotInfo = Get-ProjectSnapshotInfo -ProjectName $Project.name
-    $resumeState = Load-ProjectResumeState -ProjectName $Project.name
+    $resumeState = Load-ProjectResumeState -ProjectName $Project.name -Project $Project
     $validation = Get-ProjectResumeValidation -Project $Project -GitSummary $gitSummary -TaskDigest $taskDigest -ResumeState $resumeState -SnapshotInfo $snapshotInfo
 
     Show-ProjectResumeSummary -Project $Project -GitSummary $gitSummary -TaskDigest $taskDigest -ResumeState $resumeState -Validation $validation -SnapshotInfo $snapshotInfo
@@ -1677,7 +1835,7 @@ function Invoke-Handoff {
     $snapshotInfo = Get-ProjectSnapshotInfo -ProjectName $Project.name
     $taskDigest = Get-ProjectCurrentTaskDigest -ProjectPath $projectPath
     $gitSummary = Get-ProjectGitSummary -ProjectPath $projectPath
-    $resumeState = Load-ProjectResumeState -ProjectName $Project.name
+    $resumeState = Load-ProjectResumeState -ProjectName $Project.name -Project $Project
     $validation = Get-ProjectResumeValidation -Project $Project -GitSummary $gitSummary -TaskDigest $taskDigest -ResumeState $resumeState -SnapshotInfo $snapshotInfo
     $codexSessionId = Get-CodexSessionId
     $savedState = [pscustomobject]@{
@@ -1699,8 +1857,13 @@ function Invoke-Handoff {
         deploy_version_number = [int]$validation.DeployVersion
         codex_resume_command = [string]$validation.ResumeCommand
     }
-    Save-ProjectResumeState -State $savedState -ProjectName $Project.name | Out-Null
-    $resumeState = Load-ProjectResumeState -ProjectName $Project.name
+    if ($validation.State -eq "BLOCKED" -and ($validation.Reasons -contains "ROOT AUTHORITY CONFLICT")) {
+        Write-Host "ROOT AUTHORITY CONFLICT" -ForegroundColor Red
+        Write-Host "Metadata persistence refused until only one valid root remains for this repo." -ForegroundColor Yellow
+    } else {
+        Save-ProjectResumeState -State $savedState -ProjectName $Project.name | Out-Null
+    }
+    $resumeState = Load-ProjectResumeState -ProjectName $Project.name -Project $Project
     Show-HandoffReport -Project $Project -Status $status -SnapshotInfo $snapshotInfo -ResumeState $resumeState -Validation $validation
 
     if (-not $shouldExit) {

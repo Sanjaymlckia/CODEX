@@ -2,7 +2,7 @@
 
 Portable launcher and operating notes for the CODEX hub.
 
-The hub is designed to work on machines where the hub and project roots may use different drive letters. Do not create parallel active READMEs for machine variants; keep this file portable and use git history for rollback.
+The hub now uses a single authoritative project root: `E:\Gdrive\01 SANJAY\Codex_Sync`. `D:\CODEX_PROJECTS` is transitional only and `C:\CODEX_PROJECTS` is legacy/deprecated. Do not create parallel active READMEs for machine variants; keep this file portable and use git history for rollback.
 
 ## Launch
 
@@ -20,27 +20,24 @@ powershell -ExecutionPolicy Bypass -File .\RUN.ps1 -OperationalMode FULL_AUDIT
 
 You can also set `CODEXHUB_OPERATIONAL_MODE=FULL_AUDIT` in the current shell.
 
-Known hub roots:
+Known hub root:
 
-- Home/live: `D:\CODEX`
-- Office/alternate: `C:\CODEX`
+- `E:\Gdrive\01 SANJAY\Codex_Sync\CodexHub`
 
 ## Project Roots
 
-The launcher resolves active projects under the current machine's active project root.
+The launcher resolves active projects under the authoritative root first and uses legacy roots only as recovery hints.
 
 Project path resolution:
 
-1. `state\machine_profile.json` machine-specific `project_path_overrides[project.name]`, when present and existing
-2. `projects\projects.json` `path`, when existing
-3. Active project root fallback from `state\machine_profile.json` machine-specific `preferred_root`
-4. Existing fallback roots in this order:
+1. `projects\projects.json` explicit `path`, when present and valid
+2. `projects\projects.json` `authoritative_root` + project leaf name
+3. Existing fallback roots as deprecated recovery hints only:
    - `D:\CODEX_PROJECTS`
    - `C:\CODEX_PROJECTS`
-   - `E:\CODEX_PROJECTS`
-5. Missing-path report with the configured and resolved paths visible
+4. Missing-path report with the configured and resolved paths visible
 
-The launcher menu prints each project name, resolved path, source (`override`, `default`, `fallback`, or `missing`), and warns when the configured registry path is absent on the current machine.
+The launcher menu prints each project name, resolved path, source (`override`, `explicit`, `authoritative`, `deprecated-fallback`, or `missing`), and reports `ROOT AUTHORITY CONFLICT` when multiple roots are detected for the same repo. Conflict state blocks metadata persistence.
 
 ## Hub Files
 
@@ -52,7 +49,7 @@ The launcher menu prints each project name, resolved path, source (`override`, `
 - `tools\drift-audit.ps1` - read-only project drift audit
 - `tools\handoff.ps1` - operator-driven shutdown handoff writer
 - `.codex\` - visible rule inventory and status files
-- `state\machine_profile.json` - machine-aware preferred project root and optional local project path overrides
+- `state\machine_profile.json` - deprecated synced state note only
 - `state\last_project.txt` and `state\recent_projects.json` - launcher memory
 - `state\<PROJECT>_resume_state.json` - per-project Codex resume session state and validation metadata
 - `COMMAND_LIBRARY.md` - short command reference
@@ -92,7 +89,7 @@ The launcher prints the active root and resolved project path before launching. 
 - `LIGHT` is the default operational mode.
 - `LIGHT` reads `CURRENT_TASK.md`, `AGENTS.md`, changed files, and explicitly requested files only.
 - `LIGHT` avoids repo-wide scans, recursive searches, historical release scans, repeated governance recap, repeated runtime-truth recap, and verbose summaries.
-- `LIGHT` startup surfaces mode, token discipline state, resolved roots, project path, `CURRENT_TASK` path, and git status.
+- `LIGHT` startup surfaces `MODE`, `AUTH ROOT`, resolved project path, `CURRENT_TASK` path, and git status.
 - `FULL_AUDIT` is opt-in and allows broad audits, repo history scans, historical governance parsing, drift analysis, and wider release inspection when explicitly needed.
 - Operational mode changes Codex startup discipline only. It does not relax runtime, deployment, or release safety gates.
 
@@ -119,6 +116,5 @@ The `N` launcher flow uses root-level `templates\*.template.md` files and asks b
 
 Project health is intentionally simple:
 
-- `GREEN` means the path exists, `CURRENT_TASK.md` exists, optional guardrail docs are present, repo state is clean, and handoff is fresh.
-- `AMBER` means the path is usable but has stale handoff state, a dirty repo, or missing optional guardrail docs.
-- `RED` means the path is invalid, `CURRENT_TASK.md` is missing, or git is detached.
+- `GREEN` means the path exists, git is valid, and `CURRENT_TASK.md` exists.
+- `AMBER` means the repo path is missing, git is broken, or `CURRENT_TASK.md` is missing.
