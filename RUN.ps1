@@ -1,4 +1,4 @@
-﻿param(
+param(
     [ValidateSet("LIGHT", "FULL_AUDIT")]
     [string]$OperationalMode = ""
 )
@@ -1070,7 +1070,7 @@ Write-Host " `$displayName" -ForegroundColor Cyan
 Write-Host '=================================' -ForegroundColor DarkCyan
 Write-Host "MODE: `$operationalMode" -ForegroundColor Cyan
 Write-Host "AUTH ROOT: $($LaunchContext.CodexSyncRoot)" -ForegroundColor Cyan
-Write-Host "Token discipline active: $(if (`$operationalMode -eq 'LIGHT') { 'YES' } else { 'NO - FULL AUDIT' })" -ForegroundColor DarkCyan
+Write-Host "Token discipline active: $(if ($operationalMode -eq 'LIGHT') { 'YES' } else { 'NO - FULL AUDIT' })" -ForegroundColor DarkCyan
 Write-Host "CodexHub root: $($LaunchContext.CodexHubRoot)" -ForegroundColor DarkCyan
 Write-Host "Codex_Sync root: $($LaunchContext.CodexSyncRoot)" -ForegroundColor DarkCyan
 Write-Host "Selected project: $($LaunchContext.SelectedProject)" -ForegroundColor DarkCyan
@@ -1079,8 +1079,8 @@ Write-Host "CURRENT_TASK path: $($LaunchContext.CurrentTaskPath)" -ForegroundCol
 Write-Host "Path source: $($LaunchContext.PathSource)" -ForegroundColor DarkCyan
 Write-Host "Context: `$startupContext" -ForegroundColor Gray
 Write-Host ''
-Write-Host "Read policy: $(if (`$operationalMode -eq 'FULL_AUDIT') { 'full project context allowed' } else { 'CURRENT_TASK.md, AGENTS.md, changed files, and explicitly requested files only' })" -ForegroundColor DarkCyan
-Write-Host "Search policy: $(if (`$operationalMode -eq 'FULL_AUDIT') { 'broad audits allowed' } else { 'no repo-wide scans, recursive searches, or historical scans by default' })" -ForegroundColor DarkCyan
+Write-Host "Read policy: $(if ($operationalMode -eq 'FULL_AUDIT') { 'full project context allowed' } else { 'CURRENT_TASK.md, AGENTS.md, changed files, and explicitly requested files only' })" -ForegroundColor DarkCyan
+Write-Host "Search policy: $(if ($operationalMode -eq 'FULL_AUDIT') { 'broad audits allowed' } else { 'no repo-wide scans, recursive searches, or historical scans by default' })" -ForegroundColor DarkCyan
 Write-Host "Reading CURRENT_TASK from: $($LaunchContext.CurrentTaskPath)" -ForegroundColor Cyan
 Write-Host ''
 
@@ -2077,4 +2077,5 @@ while ($true) {
         }
     }
 }
+
 
