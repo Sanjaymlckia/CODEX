@@ -12,3 +12,5 @@ audit/
 audit/
 
 *.bundle
+
+state/local/
