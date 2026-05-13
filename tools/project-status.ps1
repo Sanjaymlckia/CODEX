@@ -2,6 +2,8 @@ param(
     [string]$ProjectPath = "",
     [string]$ProjectName = "",
     [string]$StateRoot = "",
+    [ValidateSet("authoritative", "full")]
+    [string]$CurrentTaskReadMode = "authoritative",
     [switch]$AsJson
 )
 
@@ -123,7 +125,11 @@ function Get-GitInfo {
 }
 
 function Get-CurrentTaskInfo {
-    param([string]$Root)
+    param(
+        [string]$Root,
+        [ValidateSet("authoritative", "full")]
+        [string]$ReadMode = "authoritative"
+    )
 
     $taskPath = Join-Path -Path $Root -ChildPath "CURRENT_TASK.md"
     if (-not (Test-Path -LiteralPath $taskPath)) {
@@ -139,7 +145,6 @@ function Get-CurrentTaskInfo {
     }
 
     $lines = @(Get-Content -LiteralPath $taskPath -Encoding utf8)
-    $first60 = @($lines | Select-Object -First 60)
 
     function Read-Section {
         param([string[]]$SourceLines, [string]$Heading)
@@ -161,18 +166,41 @@ function Get-CurrentTaskInfo {
         return ($collected -join "`n").Trim()
     }
 
-    $riskLines = @($lines |
-        Where-Object { [string]$_ -match '(?i)risk|blocker|caution|warning|manual required|pending|blocked' } |
-        Select-Object -First 20 |
-        ForEach-Object { [string]$_ })
+    function Read-PreferredSection {
+        param([string[]]$SourceLines, [string[]]$Headings)
+        foreach ($heading in $Headings) {
+            $value = Read-Section -SourceLines $SourceLines -Heading $heading
+            if (-not [string]::IsNullOrWhiteSpace($value)) {
+                return $value
+            }
+        }
+        return ""
+    }
+
+    $riskLines = @(
+        (Read-PreferredSection -SourceLines $lines -Headings @("Active Blockers", "Known Risks", "Risks / Blockers", "Open Risks")) -split "`r?`n" |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { [string]$_.Trim() }
+    )
+
+    if ($riskLines.Count -eq 0 -and $ReadMode -eq "full") {
+        $riskLines = @($lines |
+            Where-Object { [string]$_ -match '(?i)risk|blocker|caution|warning|manual required|pending|blocked' } |
+            Select-Object -First 20 |
+            ForEach-Object { [string]$_ })
+    }
+
+    $first60 = if ($ReadMode -eq "full") { @($lines | Select-Object -First 60) } else { @() }
 
     return [pscustomobject]@{
         path = $taskPath
         exists = $true
         first_60_lines = $first60
-        current_objective = Read-Section -SourceLines $lines -Heading "Current Objective"
-        current_issue = Read-Section -SourceLines $lines -Heading "Current Issue"
-        next_exact_step = Read-Section -SourceLines $lines -Heading "Next Exact Step"
+        current_runtime = Read-PreferredSection -SourceLines $lines -Headings @("Current Runtime", "Runtime", "Current State")
+        latest_accepted_release = Read-PreferredSection -SourceLines $lines -Headings @("Latest Accepted Release", "Accepted Release", "Last Accepted Release")
+        current_objective = Read-PreferredSection -SourceLines $lines -Headings @("Current Objective", "Objective")
+        current_issue = Read-PreferredSection -SourceLines $lines -Headings @("Current Issue", "Problem")
+        next_exact_step = Read-PreferredSection -SourceLines $lines -Headings @("Next Action", "Next Exact Step")
         risks_blockers = $riskLines
     }
 }
@@ -257,7 +285,7 @@ function New-ProjectStatus {
     if ([string]::IsNullOrWhiteSpace($Name)) { $Name = Split-Path -Path $Root -Leaf }
     $exists = Test-Path -LiteralPath $Root
     $git = if ($exists) { Get-GitInfo -Root $Root } else { [pscustomobject]@{ is_repo = $false; branch = "missing"; status_sb = "Project path not found."; latest_commit = ""; latest_commit_hash = ""; latest_commit_message = ""; upstream = ""; ahead = $null; behind = $null; ahead_behind = "unavailable"; dirty = $false; dirty_state = "MISSING" } }
-    $task = if ($exists) { Get-CurrentTaskInfo -Root $Root } else { [pscustomobject]@{ path = (Join-Path -Path $Root -ChildPath "CURRENT_TASK.md"); exists = $false; first_60_lines = @(); current_objective = ""; current_issue = ""; next_exact_step = ""; risks_blockers = @() } }
+    $task = if ($exists) { Get-CurrentTaskInfo -Root $Root -ReadMode $CurrentTaskReadMode } else { [pscustomobject]@{ path = (Join-Path -Path $Root -ChildPath "CURRENT_TASK.md"); exists = $false; first_60_lines = @(); current_runtime = ""; latest_accepted_release = ""; current_objective = ""; current_issue = ""; next_exact_step = ""; risks_blockers = @() } }
     $apps = if ($exists) { Get-AppsScriptInfo -Root $Root -GitInfo $git } else { [pscustomobject]@{ applicable = $false; clasp_path = ""; clasp_exists = $false; script_id = ""; config = $null; canonical_url_pattern_check = "not checked"; warnings = @() } }
 
     $agentsPresent = if ($exists) { Get-FilePresence -Root $Root -FileName "AGENTS.md" } else { $false }
@@ -281,6 +309,8 @@ function New-ProjectStatus {
         git = $git
         governance = [pscustomobject]@{
             current_task = $task
+            current_runtime = $task.current_runtime
+            latest_accepted_release = $task.latest_accepted_release
             current_objective = $task.current_objective
             current_issue = $task.current_issue
             next_exact_step = $task.next_exact_step
@@ -328,11 +358,17 @@ function ConvertTo-ProjectStatusMarkdown {
     $lines.Add("### Current Objective") | Out-Null
     $lines.Add($(if ($Status.governance.current_objective) { $Status.governance.current_objective } else { "Not detected." })) | Out-Null
     $lines.Add("") | Out-Null
+    $lines.Add("### Current Runtime") | Out-Null
+    $lines.Add($(if ($Status.governance.current_runtime) { $Status.governance.current_runtime } else { "Not detected." })) | Out-Null
+    $lines.Add("") | Out-Null
     $lines.Add("### Current Issue") | Out-Null
     $lines.Add($(if ($Status.governance.current_issue) { $Status.governance.current_issue } else { "Not detected." })) | Out-Null
     $lines.Add("") | Out-Null
     $lines.Add("### Next Exact Step") | Out-Null
     $lines.Add($(if ($Status.governance.next_exact_step) { $Status.governance.next_exact_step } else { "Not detected." })) | Out-Null
+    $lines.Add("") | Out-Null
+    $lines.Add("### Latest Accepted Release") | Out-Null
+    $lines.Add($(if ($Status.governance.latest_accepted_release) { $Status.governance.latest_accepted_release } else { "Not detected." })) | Out-Null
     $lines.Add("") | Out-Null
     $lines.Add("### Risks / Blockers") | Out-Null
     if ($Status.governance.risks_blockers.Count -gt 0) {
@@ -340,11 +376,13 @@ function ConvertTo-ProjectStatusMarkdown {
     } else {
         $lines.Add("None detected.") | Out-Null
     }
-    $lines.Add("") | Out-Null
-    $lines.Add("### First 60 Lines Of CURRENT_TASK.md") | Out-Null
-    $lines.Add("```md") | Out-Null
-    foreach ($line in $Status.governance.current_task.first_60_lines) { $lines.Add($line) | Out-Null }
-    $lines.Add('```') | Out-Null
+    if ($Status.governance.current_task.first_60_lines.Count -gt 0) {
+        $lines.Add("") | Out-Null
+        $lines.Add("### First 60 Lines Of CURRENT_TASK.md") | Out-Null
+        $lines.Add("```md") | Out-Null
+        foreach ($line in $Status.governance.current_task.first_60_lines) { $lines.Add($line) | Out-Null }
+        $lines.Add('```') | Out-Null
+    }
 
     if ($Status.apps_script.applicable) {
         $lines.Add("") | Out-Null

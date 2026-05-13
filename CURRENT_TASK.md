@@ -1,6 +1,32 @@
 # CURRENT TASK
 
-- Objective: Keep the CODEX Hub launcher portable across machines with different `CODEX_PROJECTS` drive letters while supporting hybrid Codex resume governance.
+## Current Objective
+
+Keep the CODEX Hub launcher portable across machines with different `CODEX_PROJECTS` drive letters while supporting hybrid Codex resume governance and default LIGHT operational mode.
+
+## Current Runtime
+
+- Workspace: `E:\Gdrive\01 SANJAY\Codex_Sync\CodexHub`
+- Scope: CodexHub only
+- Default operational mode: `LIGHT`
+- Broad audit mode: `FULL_AUDIT` only when explicitly requested
+
+## Active Blockers
+
+- None confirmed.
+- Stop if LIGHT mode weakens release safety, if CURRENT_TASK authority becomes ambiguous, or if operational correctness degrades.
+
+## Next Action
+
+- Validate launcher startup output and confirm LIGHT mode reduces startup context without weakening resume or release safety.
+
+## Latest Accepted Release
+
+- Current accepted hub baseline includes portable root resolution, hybrid resume governance, and this LIGHT mode launcher discipline update dated `2026-05-13`.
+
+## Session History
+
+- Objective: Keep the CODEX Hub launcher portable across machines with different `CODEX_PROJECTS` drive letters while supporting hybrid Codex resume governance and default LIGHT operational mode.
 - Completed:
   - Fixed launcher input responsiveness and deterministic exit handling.
   - Added minimal Lite Ops display and initialization support.
@@ -74,3 +100,10 @@
   - Added roadmap and governance validation docs: `ROADMAP.md`, `CODEXHUB_ROADMAP.md`, `GOVERNANCE.md`, `RULELOG.md`, `STAGES.md`, `PIPELINE.md`, and `LIFECYCLE.md`.
   - Roadmap now defines PASS 0 lifecycle/pipeline architecture, PASS 1 operational hardening, PASS 2 governance simplification, PASS 3 Books integration, and PASS 4 LMS convergence.
   - Next recommended operational priority: begin FODE PASS 1 operational hardening with dashboard visibility, email observability, WhatsApp fallback, duplicate protection, and trigger/runtime telemetry.
+- LIGHT mode operational update (2026-05-13):
+  - Added launcher-level operational mode selection with `LIGHT` default and `FULL_AUDIT` opt-in.
+  - LIGHT startup now displays mode, token discipline state, resolved roots, project path, CURRENT_TASK path, and git status before Codex launch.
+  - LIGHT bootstrap now limits startup context to compact `CURRENT_TASK.md` and `AGENTS.md` reads plus explicit operational rules injected ahead of project prompts.
+  - `tools\project-status.ps1` now prefers authoritative current-task sections: current runtime, active blockers/risks, next action, and latest accepted release.
+  - FULL_AUDIT preserves broader current-task and audit inspection when explicitly requested.
+  - No project runtimes, deployments, Apps Script behavior, or cloud dependencies were modified.

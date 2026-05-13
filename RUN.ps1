@@ -1,3 +1,8 @@
+param(
+    [ValidateSet("LIGHT", "FULL_AUDIT")]
+    [string]$OperationalMode = ""
+)
+
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -20,6 +25,36 @@ function Get-HubPromptPath { param([string]$FileName) Join-Path -Path (Get-Promp
 function Get-TemplatesRoot { Join-Path -Path (Get-Root) -ChildPath "templates" }
 function Get-ToolsRoot { Join-Path -Path (Get-Root) -ChildPath "tools" }
 function Get-CodexSyncRoot { Split-Path -Path (Get-Root) -Parent }
+
+function Resolve-OperationalMode {
+    param([string]$RequestedMode = "")
+
+    foreach ($candidate in @($RequestedMode, $env:CODEXHUB_OPERATIONAL_MODE)) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) {
+            continue
+        }
+
+        $normalized = $candidate.Trim().ToUpperInvariant()
+        if ($normalized -in @("LIGHT", "FULL_AUDIT")) {
+            return $normalized
+        }
+    }
+
+    return "LIGHT"
+}
+
+function Get-OperationalModeSettings {
+    param([string]$Mode)
+
+    $resolvedMode = if ([string]::IsNullOrWhiteSpace($Mode)) { "LIGHT" } else { $Mode.Trim().ToUpperInvariant() }
+    $isFullAudit = $resolvedMode -eq "FULL_AUDIT"
+
+    return [pscustomobject]@{
+        Mode = $resolvedMode
+        TokenDisciplineActive = (-not $isFullAudit)
+        CurrentTaskReadMode = if ($isFullAudit) { "full" } else { "authoritative" }
+    }
+}
 
 function Get-PromptPath {
     param([string]$ProjectName)
@@ -418,6 +453,7 @@ function Resolve-ProjectLaunchContext {
     return [pscustomobject]@{
         CodexHubRoot      = Get-Root
         CodexSyncRoot     = $activeRoot
+        OperationalMode   = $script:CodexHubOperationalMode
         SelectedProject   = Get-Label -Project $Project
         ProjectPath       = $projectPath
         CurrentTaskPath   = $pathInfo.TaskPath
@@ -800,6 +836,7 @@ function Get-ProjectFreshLaunchBootstrap {
     $projectPathLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $ProjectPath
     $contextLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $Project.startup_context
     $promptPathLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $PromptPath
+    $modeLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $LaunchContext.OperationalMode
 
     return @"
 `$projectName = $projectNameLiteral
@@ -807,13 +844,66 @@ function Get-ProjectFreshLaunchBootstrap {
 `$projectPath = $projectPathLiteral
 `$startupContext = $contextLiteral
 `$promptPath = $promptPathLiteral
-`$liteOpsFiles = @('CURRENT_TASK.md', 'DECISIONS.md', 'KNOWN_GOOD_STATE.md')
+`$operationalMode = $modeLiteral
 
 Set-Location -LiteralPath `$projectPath
+
+function Get-CurrentTaskSummary {
+    param([string]`$TaskPath, [string]`$Mode)
+
+    if (-not (Test-Path -LiteralPath `$TaskPath)) {
+        return @('CURRENT_TASK.md missing.')
+    }
+
+    `$lines = @(Get-Content -LiteralPath `$TaskPath -Encoding utf8)
+    if (`$Mode -eq 'FULL_AUDIT') {
+        return `$lines
+    }
+
+    `$sections = [ordered]@{
+        'Current Runtime' = @()
+        'Active Blockers' = @()
+        'Next Action' = @()
+        'Latest Accepted Release' = @()
+    }
+    `$activeSection = ''
+    foreach (`$line in `$lines) {
+        if (`$line -match '^\s*#{1,6}\s+(.+?)\s*$') {
+            `$candidate = `$Matches[1].Trim()
+            if (`$sections.Contains(`$candidate)) {
+                `$activeSection = `$candidate
+            } else {
+                `$activeSection = ''
+            }
+            continue
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace(`$activeSection) -and -not [string]::IsNullOrWhiteSpace(`$line)) {
+            `$sections[`$activeSection] += `$line
+        }
+    }
+
+    `$summary = New-Object System.Collections.Generic.List[string]
+    foreach (`$heading in `$sections.Keys) {
+        `$summary.Add("## `$heading") | Out-Null
+        if (`$sections[`$heading].Count -gt 0) {
+            foreach (`$entry in `$sections[`$heading]) {
+                `$summary.Add([string]`$entry) | Out-Null
+            }
+        } else {
+            `$summary.Add('Not stated.') | Out-Null
+        }
+        `$summary.Add('') | Out-Null
+    }
+
+    return @(`$summary)
+}
 
 Write-Host '=================================' -ForegroundColor DarkCyan
 Write-Host " `$displayName" -ForegroundColor Cyan
 Write-Host '=================================' -ForegroundColor DarkCyan
+Write-Host "MODE: `$operationalMode" -ForegroundColor Cyan
+Write-Host "Token discipline active: $(if (`$operationalMode -eq 'LIGHT') { 'YES' } else { 'NO - FULL AUDIT' })" -ForegroundColor DarkCyan
 Write-Host "CodexHub root: $($LaunchContext.CodexHubRoot)" -ForegroundColor DarkCyan
 Write-Host "Codex_Sync root: $($LaunchContext.CodexSyncRoot)" -ForegroundColor DarkCyan
 Write-Host "Selected project: $($LaunchContext.SelectedProject)" -ForegroundColor DarkCyan
@@ -822,20 +912,29 @@ Write-Host "CURRENT_TASK path: $($LaunchContext.CurrentTaskPath)" -ForegroundCol
 Write-Host "Path source: $($LaunchContext.PathSource)" -ForegroundColor DarkCyan
 Write-Host "Context: `$startupContext" -ForegroundColor Gray
 Write-Host ''
+Write-Host "Read policy: $(if (`$operationalMode -eq 'FULL_AUDIT') { 'full project context allowed' } else { 'CURRENT_TASK.md, AGENTS.md, changed files, and explicitly requested files only' })" -ForegroundColor DarkCyan
+Write-Host "Search policy: $(if (`$operationalMode -eq 'FULL_AUDIT') { 'broad audits allowed' } else { 'no repo-wide scans, recursive searches, or historical scans by default' })" -ForegroundColor DarkCyan
 Write-Host "Reading CURRENT_TASK from: $($LaunchContext.CurrentTaskPath)" -ForegroundColor Cyan
 Write-Host ''
 
-foreach (`$fileName in `$liteOpsFiles) {
-    `$filePath = Join-Path -Path `$projectPath -ChildPath `$fileName
-    Write-Host `$fileName -ForegroundColor Magenta
-    Write-Host ('-' * `$fileName.Length) -ForegroundColor DarkMagenta
-    if (Test-Path -LiteralPath `$filePath) {
-        Get-Content -LiteralPath `$filePath -Encoding utf8
+Write-Host 'CURRENT_TASK.md' -ForegroundColor Magenta
+Write-Host ('-' * 'CURRENT_TASK.md'.Length) -ForegroundColor DarkMagenta
+Get-CurrentTaskSummary -TaskPath '$($LaunchContext.CurrentTaskPath)' -Mode `$operationalMode
+Write-Host ''
+
+`$agentsPath = Join-Path -Path `$projectPath -ChildPath 'AGENTS.md'
+Write-Host 'AGENTS.md' -ForegroundColor Magenta
+Write-Host ('-' * 'AGENTS.md'.Length) -ForegroundColor DarkMagenta
+if (Test-Path -LiteralPath `$agentsPath) {
+    if (`$operationalMode -eq 'FULL_AUDIT') {
+        Get-Content -LiteralPath `$agentsPath -Encoding utf8
     } else {
-        Write-Host 'missing' -ForegroundColor Yellow
+        Get-Content -LiteralPath `$agentsPath -Encoding utf8 | Select-Object -First 40
     }
-    Write-Host ''
+} else {
+    Write-Host 'missing' -ForegroundColor Yellow
 }
+Write-Host ''
 
 if (Test-Path -LiteralPath '.\.git') {
     `$gitBranch = (git rev-parse --abbrev-ref HEAD 2>`$null)
@@ -852,6 +951,23 @@ if (Test-Path -LiteralPath '.\.git') {
 if (Get-Command codex -ErrorAction SilentlyContinue) {
     if (Test-Path -LiteralPath `$promptPath) {
         `$initialPrompt = Get-Content -LiteralPath `$promptPath -Raw -Encoding utf8
+        `$modeRules = if (`$operationalMode -eq 'FULL_AUDIT') {
+@'
+Operational mode: FULL_AUDIT
+- Broad repo scans, historical governance parsing, drift analysis, and release-history inspection are allowed when needed.
+- Keep output concise, but audit depth is allowed.
+'@
+        } else {
+@'
+Operational mode: LIGHT
+- Read only CURRENT_TASK.md, AGENTS.md, changed files, and explicitly requested files unless the user asks for more.
+- Do not start repo-wide scans, recursive searches, historical release scans, or broad audits by default.
+- Do not repeat governance recap or resolved runtime truth unless it changes.
+- Use concise operational summaries, command-style output, and delta summaries.
+- For CURRENT_TASK.md, prioritize current runtime, active blockers, next action, and latest accepted release; ignore archived sections unless requested.
+'@
+        }
+        `$initialPrompt = (`$modeRules.Trim() + "`r`n`r`n" + `$initialPrompt.Trim())
         if (-not [string]::IsNullOrWhiteSpace(`$initialPrompt)) {
             & codex `$initialPrompt
         } else {
@@ -957,6 +1073,9 @@ function Read-ProjectLaunchMode {
         default { return "auto" }
     }
 }
+
+$script:CodexHubOperationalMode = Resolve-OperationalMode -RequestedMode $OperationalMode
+$script:CodexHubModeSettings = Get-OperationalModeSettings -Mode $script:CodexHubOperationalMode
 
 function Get-LastHandoffInfo {
     param(
@@ -1305,6 +1424,8 @@ function Show-Header {
     Write-Host "=============================================" -ForegroundColor DarkCyan
     Write-Host "               CODEX HUB LAUNCHER            " -ForegroundColor Cyan
     Write-Host "=============================================" -ForegroundColor DarkCyan
+    Write-Host (" Mode: {0}" -f $script:CodexHubModeSettings.Mode) -ForegroundColor Cyan
+    Write-Host (" Token discipline: {0}" -f $(if ($script:CodexHubModeSettings.TokenDisciplineActive) { "ACTIVE" } else { "FULL AUDIT" })) -ForegroundColor DarkCyan
     Write-Host (" Active: {0}   Deprecated: {1}   Archived: {2}" -f $active, $deprecated, $archived) -ForegroundColor Gray
     Write-Host (" CodexHub root: {0}" -f $hubRoot) -ForegroundColor DarkCyan
     Write-Host (" Codex_Sync root: {0}" -f $syncRoot) -ForegroundColor DarkCyan

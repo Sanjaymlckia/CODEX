@@ -12,6 +12,14 @@ Run from the hub root on the current machine:
 powershell -ExecutionPolicy Bypass -File .\RUN.ps1
 ```
 
+Operational mode defaults to `LIGHT`. For a broader audit session:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\RUN.ps1 -OperationalMode FULL_AUDIT
+```
+
+You can also set `CODEXHUB_OPERATIONAL_MODE=FULL_AUDIT` in the current shell.
+
 Known hub roots:
 
 - Home/live: `D:\CODEX`
@@ -78,6 +86,15 @@ Project open uses hybrid resume by default:
 5. Operators can choose `A` auto, `R` resume, or `F` fresh reconstruction at launch time.
 
 The launcher prints the active root and resolved project path before launching. If Codex Desktop does not open the requested workspace automatically, use the printed path.
+
+## Operational Modes
+
+- `LIGHT` is the default operational mode.
+- `LIGHT` reads `CURRENT_TASK.md`, `AGENTS.md`, changed files, and explicitly requested files only.
+- `LIGHT` avoids repo-wide scans, recursive searches, historical release scans, repeated governance recap, repeated runtime-truth recap, and verbose summaries.
+- `LIGHT` startup surfaces mode, token discipline state, resolved roots, project path, `CURRENT_TASK` path, and git status.
+- `FULL_AUDIT` is opt-in and allows broad audits, repo history scans, historical governance parsing, drift analysis, and wider release inspection when explicitly needed.
+- Operational mode changes Codex startup discipline only. It does not relax runtime, deployment, or release safety gates.
 
 ## Project Discipline
 
