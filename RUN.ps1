@@ -1226,6 +1226,8 @@ function Start-ProjectLaunch {
         "-ExecutionPolicy", "Bypass",
         "-File", $lastBootstrapPath
     ) | Out-Null
+
+    return $true
 }
 
 function Read-ProjectLaunchMode {
@@ -1604,7 +1606,7 @@ function Open-Proj {
     param([object]$Project)
 
     if ($null -eq $Project) {
-        return
+        return $false
     }
 
     $launchContext = Resolve-ProjectLaunchContext -Project $Project
@@ -1618,7 +1620,7 @@ function Open-Proj {
         if (-not [string]::IsNullOrWhiteSpace($launchContext.FailureReason)) {
             Write-Host ("Reason: {0}" -f $launchContext.FailureReason) -ForegroundColor Yellow
         }
-        return
+        return $false
     }
 
     Set-LastProjectName -Name $Project.name
@@ -1649,7 +1651,7 @@ function Open-Proj {
         $launchMode = "fresh"
     }
 
-    Start-ProjectLaunch -Project $Project -ProjectPath $projectPath -LaunchContext $launchContext -LaunchMode $launchMode -Validation $validation -TaskDigest $taskDigest -SnapshotInfo $snapshotInfo -ResumeState $resumeState
+    return (Start-ProjectLaunch -Project $Project -ProjectPath $projectPath -LaunchContext $launchContext -LaunchMode $launchMode -Validation $validation -TaskDigest $taskDigest -SnapshotInfo $snapshotInfo -ResumeState $resumeState)
 }
 
 function Open-ProjInCodexApp {
@@ -2047,12 +2049,14 @@ while ($true) {
             continue
         }
         '^[Oo]$' {
-            Open-Proj -Project ([pscustomobject]@{
+            if (Open-Proj -Project ([pscustomobject]@{
                 name = "CODEX_ROOT"
                 display_name = "CODEX Root"
                 path = Get-Root
                 startup_context = "CODEX hub root. Review launcher, registry, prompts, and documentation before making hub-level changes."
-            })
+            })) {
+                return
+            }
             continue
         }
         '^[Vv]$' {
@@ -2065,7 +2069,9 @@ while ($true) {
         '^\d+$' {
             $index = [int]$selection - 1
             if ($index -ge 0 -and $index -lt $activeProjects.Count) {
-                Open-Proj -Project $activeProjects[$index]
+                if (Open-Proj -Project $activeProjects[$index]) {
+                    return
+                }
             } else {
                 Write-Host ""
                 Write-Host "Invalid selection." -ForegroundColor Yellow
