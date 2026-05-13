@@ -791,10 +791,10 @@ function Get-ProjectResumeValidation {
 
     if ($null -eq $ResumeState) {
         return [pscustomobject]@{
-            State = "BLOCKED"
+            State = "WARNING"
             Reasons = @("Missing resume state.")
             ResumeCommand = ""
-            RecommendedMode = "reconstruct"
+            RecommendedMode = "fresh"
             CrossMachine = $false
             ResumeAvailable = $false
             SavedSessionId = ""
@@ -1005,6 +1005,7 @@ function Get-ProjectFreshLaunchBootstrap {
     $modeLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $LaunchContext.OperationalMode
 
     return @"
+try {
 `$projectName = $projectNameLiteral
 `$displayName = $displayNameLiteral
 `$projectPath = $projectPathLiteral
@@ -1146,6 +1147,16 @@ Operational mode: LIGHT
 } else {
     Write-Host 'codex CLI not found in PATH. Shell opened at project root.' -ForegroundColor Yellow
 }
+} catch {
+    Write-Host ''
+    Write-Host 'CHILD BOOTSTRAP FAILED' -ForegroundColor Red
+    Write-Host (`$_.Exception.Message) -ForegroundColor Yellow
+    if (`$_.InvocationInfo -and `$_.InvocationInfo.PositionMessage) {
+        Write-Host (`$_.InvocationInfo.PositionMessage) -ForegroundColor DarkYellow
+    }
+    Write-Host ''
+    Read-Host 'Press Enter to keep this window visible after the failure'
+}
 "@
 }
 
@@ -1162,6 +1173,7 @@ function Get-ProjectResumeLaunchBootstrap {
     $resumeSessionLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $ResumeSessionId
 
     return @"
+try {
 `$projectPath = $(ConvertTo-SingleQuotedPowerShellLiteral -Value $ProjectPath)
 Set-Location -LiteralPath `$projectPath
 
@@ -1188,6 +1200,16 @@ $freshBootstrap
     Write-Host 'codex CLI not found in PATH. Falling back to fresh reconstruction.' -ForegroundColor Yellow
 $freshBootstrap
 }
+} catch {
+    Write-Host ''
+    Write-Host 'CHILD BOOTSTRAP FAILED' -ForegroundColor Red
+    Write-Host (`$_.Exception.Message) -ForegroundColor Yellow
+    if (`$_.InvocationInfo -and `$_.InvocationInfo.PositionMessage) {
+        Write-Host (`$_.InvocationInfo.PositionMessage) -ForegroundColor DarkYellow
+    }
+    Write-Host ''
+    Read-Host 'Press Enter to keep this window visible after the failure'
+}
 "@
 }
 
@@ -1204,28 +1226,24 @@ function Start-ProjectLaunch {
     )
 
     $promptPath = Get-PromptPath -ProjectName $Project.name
-    $bootstrap = $null
-    if ($LaunchMode -eq "resume" -and $Validation.State -eq "CLEAN" -and $Validation.ResumeAvailable) {
-        $bootstrap = Get-ProjectResumeLaunchBootstrap -Project $Project -ProjectPath $ProjectPath -PromptPath $promptPath -LaunchContext $LaunchContext -ResumeSessionId $Validation.SavedSessionId
-    } else {
-        if ($LaunchMode -eq "resume" -and $Validation.State -ne "CLEAN") {
-            Write-Host "RESUME STATE DRIFT DETECTED" -ForegroundColor Yellow
-            Write-Host ("Drift state: {0}" -f $Validation.State) -ForegroundColor Yellow
-            if ($Validation.Reasons.Count -gt 0) {
-                Write-Host ("Reasons: {0}" -f ($Validation.Reasons -join " | ")) -ForegroundColor Yellow
-            }
-        }
-        $bootstrap = Get-ProjectFreshLaunchBootstrap -Project $Project -ProjectPath $ProjectPath -PromptPath $promptPath -LaunchContext $LaunchContext
-    }
+    $projectPathLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $ProjectPath
+    $launchCommand = "try { Set-Location -LiteralPath $projectPathLiteral; codex } catch { Write-Host ''; Write-Host 'CHILD HANDOFF FAILED' -ForegroundColor Red; Write-Host (`$_.Exception.Message) -ForegroundColor Yellow; if (`$_.InvocationInfo -and `$_.InvocationInfo.PositionMessage) { Write-Host (`$_.InvocationInfo.PositionMessage) -ForegroundColor DarkYellow }; Write-Host ''; Read-Host 'Press Enter to keep this window visible after the failure'; exit 1 }"
 
     $lastBootstrapPath = Join-Path -Path (Get-StateRoot) -ChildPath "last_child_bootstrap.ps1"
-    Set-Content -LiteralPath $lastBootstrapPath -Value $bootstrap -Encoding utf8
+    Set-Content -LiteralPath $lastBootstrapPath -Value $launchCommand -Encoding utf8
 
-    Start-Process powershell.exe -ArgumentList @(
-        "-NoExit",
-        "-ExecutionPolicy", "Bypass",
-        "-File", $lastBootstrapPath
-    ) | Out-Null
+    try {
+        Start-Process powershell.exe -ArgumentList @(
+            "-NoExit",
+            "-ExecutionPolicy", "Bypass",
+            "-Command", $launchCommand
+        ) -WorkingDirectory $ProjectPath | Out-Null
+    } catch {
+        Write-Host ""
+        Write-Host "Project launch failed." -ForegroundColor Red
+        Write-Host ($_.Exception.Message) -ForegroundColor Yellow
+        return $false
+    }
 
     return $true
 }

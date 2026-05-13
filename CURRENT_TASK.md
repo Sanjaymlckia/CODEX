@@ -33,6 +33,8 @@ Keep CodexHub stable in LIGHT mode while enforcing `E:\Gdrive\01 SANJAY\Codex_Sy
 
 ## Session History
 
+- Normal LIGHT launch handoff for project selections now uses direct `powershell -> Set-Location -> codex` instead of generated child bootstrap orchestration on the hot path.
+- Missing resume state is display-only `WARNING` and no longer blocks or complicates normal project launch.
 - Child bootstrap generation now emits valid PowerShell for current-task summaries, including the exact form `$summary.Add("## $heading") | Out-Null`.
 - Startup validation and `--selftest` remain the required fast checks before trusting menu/runtime behavior.
 - Missing resume state now reports `INFO`; dirty or drifted resume conditions degrade to `RECOVERABLE`.
