@@ -2,35 +2,24 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 function Get-Root {
-    if (
-        $null -ne $MyInvocation.MyCommand -and
-        $null -ne $MyInvocation.MyCommand.PSObject.Properties["Path"] -and
-        $MyInvocation.MyCommand.Path
-    ) {
-        return Split-Path -Path $MyInvocation.MyCommand.Path -Parent
-    }
-
-    if ($PSCommandPath) {
-        return Split-Path -Path $PSCommandPath -Parent
-    }
-
     if ($PSScriptRoot) {
         return $PSScriptRoot
     }
 
-    return (Get-Location).Path
+    throw "PSScriptRoot is unavailable; CodexHub root cannot be derived safely."
 }
 
 function Get-RegPath { Join-Path -Path (Get-Root) -ChildPath "projects\projects.json" }
 function Get-StateRoot { Join-Path -Path (Get-Root) -ChildPath "state" }
 function Get-LastPath { Join-Path -Path (Get-StateRoot) -ChildPath "last_project.txt" }
-function Get-MachineProfilePath { Join-Path -Path (Get-StateRoot) -ChildPath "machine_profile.json" }
+function Get-LocalMachineProfilePath { Join-Path -Path (Get-StateRoot) -ChildPath "local\machine.local.json" }
 function Get-RecentPath { Join-Path -Path (Get-StateRoot) -ChildPath "recent_projects.json" }
 function Get-PromptsRoot { Join-Path -Path (Get-Root) -ChildPath "prompts" }
 function Get-CommandLibraryPath { Join-Path -Path (Get-Root) -ChildPath "COMMAND_LIBRARY.md" }
 function Get-HubPromptPath { param([string]$FileName) Join-Path -Path (Get-PromptsRoot) -ChildPath $FileName }
 function Get-TemplatesRoot { Join-Path -Path (Get-Root) -ChildPath "templates" }
 function Get-ToolsRoot { Join-Path -Path (Get-Root) -ChildPath "tools" }
+function Get-CodexSyncRoot { Split-Path -Path (Get-Root) -Parent }
 
 function Get-PromptPath {
     param([string]$ProjectName)
@@ -126,36 +115,6 @@ function Set-LastProjectName {
     Set-Content -LiteralPath $lastPath -Value $Name -Encoding utf8
 }
 
-function Get-MachineProfile {
-    $profilePath = Get-MachineProfilePath
-    if (-not (Test-Path -LiteralPath $profilePath)) {
-        return New-DefaultMachineProfile
-    }
-
-    try {
-        $raw = Get-Content -LiteralPath $profilePath -Raw -Encoding utf8
-        if ([string]::IsNullOrWhiteSpace($raw)) {
-            return New-DefaultMachineProfile
-        }
-
-        return $raw | ConvertFrom-Json -ErrorAction Stop
-    } catch {
-        return New-DefaultMachineProfile
-    }
-}
-
-function Save-MachineProfile {
-    param([object]$Profile)
-
-    if ($null -eq $Profile) {
-        return
-    }
-
-    $profilePath = Get-MachineProfilePath
-    Ensure-ParentDirectory -Path $profilePath
-    $Profile | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $profilePath -Encoding utf8
-}
-
 function Get-MachineName {
     if (-not [string]::IsNullOrWhiteSpace($env:COMPUTERNAME)) {
         return $env:COMPUTERNAME.Trim().ToUpperInvariant()
@@ -164,64 +123,22 @@ function Get-MachineName {
     return [System.Environment]::MachineName.Trim().ToUpperInvariant()
 }
 
-function New-DefaultMachineProfile {
-    $machineName = Get-MachineName
-    $defaultPreferredRoot = if (Test-Path -LiteralPath "D:\CODEX_PROJECTS") { "D:\CODEX_PROJECTS" } else { "C:\CODEX_PROJECTS" }
+function Get-LocalMachineProfile {
+    $profilePath = Get-LocalMachineProfilePath
+    if (-not (Test-Path -LiteralPath $profilePath)) {
+        return $null
+    }
 
-    return [pscustomobject]@{
-        active_machine = $machineName
-        machines = [pscustomobject]@{
-            $machineName = [pscustomobject]@{
-                preferred_root = $defaultPreferredRoot
-            }
-            HOME = [pscustomobject]@{
-                preferred_root = "D:\CODEX_PROJECTS"
-            }
-            OFFICE = [pscustomobject]@{
-                preferred_root = "C:\CODEX_PROJECTS"
-            }
+    try {
+        $raw = Get-Content -LiteralPath $profilePath -Raw -Encoding utf8
+        if ([string]::IsNullOrWhiteSpace($raw)) {
+            return $null
         }
-        fallback_roots = @(
-            "D:\CODEX_PROJECTS",
-            "C:\CODEX_PROJECTS",
-            "E:\CODEX_PROJECTS"
-        )
+
+        return $raw | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        return $null
     }
-}
-
-function Get-ProfileMachineEntry {
-    param([object]$Profile)
-
-    $machineName = Get-MachineName
-    if ($null -ne $Profile.machines -and $null -ne $Profile.machines.PSObject.Properties[$machineName]) {
-        return $Profile.machines.PSObject.Properties[$machineName].Value
-    }
-
-    return $null
-}
-
-function Get-PreferredProjectRoot {
-    $profile = Get-MachineProfile
-    if ($null -eq $profile) {
-        return ""
-    }
-
-    $machine = Get-ProfileMachineEntry -Profile $profile
-    if ($null -ne $machine -and $null -ne $machine.PSObject.Properties["preferred_root"]) {
-        $preferredRoot = [string]$machine.preferred_root
-        if (-not [string]::IsNullOrWhiteSpace($preferredRoot)) {
-            return $preferredRoot.Trim()
-        }
-    }
-
-    if ($null -ne $profile.PSObject.Properties["preferred_project_root"]) {
-        $preferredRoot = [string]$profile.preferred_project_root
-        if (-not [string]::IsNullOrWhiteSpace($preferredRoot)) {
-            return $preferredRoot.Trim()
-        }
-    }
-
-    return ""
 }
 
 function Get-ProjectPathOverride {
@@ -231,58 +148,19 @@ function Get-ProjectPathOverride {
         return ""
     }
 
-    $profile = Get-MachineProfile
-    if ($null -eq $profile) {
-        return ""
-    }
-
-    $machine = Get-ProfileMachineEntry -Profile $profile
-    foreach ($container in @($machine, $profile)) {
-        if (
-            $null -ne $container -and
-            $null -ne $container.PSObject.Properties["project_path_overrides"] -and
-            $null -ne $container.project_path_overrides.PSObject.Properties[$Project.name]
-        ) {
-            $overridePath = [string]$container.project_path_overrides.PSObject.Properties[$Project.name].Value
-            if (-not [string]::IsNullOrWhiteSpace($overridePath)) {
-                return $overridePath.Trim()
-            }
+    $profile = Get-LocalMachineProfile
+    if (
+        $null -ne $profile -and
+        $null -ne $profile.PSObject.Properties["projects"] -and
+        $null -ne $profile.projects.PSObject.Properties[$Project.name]
+    ) {
+        $overridePath = [string]$profile.projects.PSObject.Properties[$Project.name].Value
+        if (-not [string]::IsNullOrWhiteSpace($overridePath)) {
+            return $overridePath.Trim()
         }
     }
 
     return ""
-}
-
-function Set-PreferredProjectRoot {
-    param([string]$RootPath)
-
-    if ([string]::IsNullOrWhiteSpace($RootPath)) {
-        return
-    }
-
-    $profile = Get-MachineProfile
-    $machineName = Get-MachineName
-    if ($null -eq $profile.PSObject.Properties["machines"]) {
-        $profile | Add-Member -MemberType NoteProperty -Name "machines" -Value ([pscustomobject]@{})
-    }
-
-    if ($null -eq $profile.machines.PSObject.Properties[$machineName]) {
-        $profile.machines | Add-Member -MemberType NoteProperty -Name $machineName -Value ([pscustomobject]@{ preferred_root = $RootPath })
-    } else {
-        $profile.machines.PSObject.Properties[$machineName].Value.preferred_root = $RootPath
-    }
-
-    if ($null -eq $profile.PSObject.Properties["active_machine"]) {
-        $profile | Add-Member -MemberType NoteProperty -Name "active_machine" -Value $machineName
-    } else {
-        $profile.active_machine = $machineName
-    }
-
-    if ($null -eq $profile.PSObject.Properties["fallback_roots"]) {
-        $profile | Add-Member -MemberType NoteProperty -Name "fallback_roots" -Value @("D:\CODEX_PROJECTS", "C:\CODEX_PROJECTS", "E:\CODEX_PROJECTS")
-    }
-
-    Save-MachineProfile -Profile $profile
 }
 
 function Load-RecentProjects {
@@ -437,18 +315,6 @@ function Normalize-ProjectKey {
     return (($Value -replace '[^A-Za-z0-9]', '').Trim().ToUpperInvariant())
 }
 
-function Test-IsZohoCrmProject {
-    param([object]$Project)
-
-    if ($null -eq $Project) {
-        return $false
-    }
-
-    $nameKey = Normalize-ProjectKey -Value $Project.name
-    $labelKey = Normalize-ProjectKey -Value (Get-Label -Project $Project)
-    return ($nameKey -eq "ZOHOCRM" -or $labelKey -eq "ZOHOCRM")
-}
-
 function Get-CurrentTaskPath {
     param([object]$Project)
 
@@ -456,17 +322,13 @@ function Get-CurrentTaskPath {
     return Join-Path -Path $projectPath -ChildPath "CURRENT_TASK.md"
 }
 
-function Get-ConfiguredProjectRoots {
-    $profile = Get-MachineProfile
-    if ($null -ne $profile.PSObject.Properties["fallback_roots"]) {
-        return @($profile.fallback_roots | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+function Get-ActiveProjectRoot {
+    $syncRoot = Get-CodexSyncRoot
+    if ([string]::IsNullOrWhiteSpace($syncRoot) -or -not (Test-Path -LiteralPath $syncRoot)) {
+        return ""
     }
 
-    return @(
-        "D:\CODEX_PROJECTS",
-        "C:\CODEX_PROJECTS",
-        "E:\CODEX_PROJECTS"
-    )
+    return $syncRoot
 }
 
 function Get-ProjectRelativePath {
@@ -476,35 +338,7 @@ function Get-ProjectRelativePath {
         return ""
     }
 
-    $trimmed = $ConfiguredPath.Trim()
-    foreach ($root in (Get-ConfiguredProjectRoots)) {
-        $rootPrefix = $root.TrimEnd("\")
-        if ([string]::Equals($trimmed, $rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-            return ""
-        }
-
-        if ($trimmed.StartsWith($rootPrefix + "\", [System.StringComparison]::OrdinalIgnoreCase)) {
-            return $trimmed.Substring($rootPrefix.Length + 1)
-        }
-    }
-
-    return ""
-}
-
-function Get-ActiveProjectRoot {
-    $preferredRoot = Get-PreferredProjectRoot
-    if (-not [string]::IsNullOrWhiteSpace($preferredRoot) -and (Test-Path -LiteralPath $preferredRoot)) {
-        return $preferredRoot
-    }
-
-    foreach ($root in (Get-ConfiguredProjectRoots)) {
-        if (Test-Path -LiteralPath $root) {
-            Set-PreferredProjectRoot -RootPath $root
-            return $root
-        }
-    }
-
-    return ""
+    return (Split-Path -Path $ConfiguredPath.TrimEnd("\") -Leaf)
 }
 
 function Resolve-ProjectPath {
@@ -523,76 +357,54 @@ function Resolve-ProjectPathInfo {
             ConfiguredPath    = ""
             OverridePath      = ""
             ConfiguredMissing = $false
+            TaskPath          = ""
+            TaskExists        = $false
+            Reason            = "Project registry entry has no path."
         }
     }
 
     $configuredPath = $Project.path.Trim()
-    $configuredMissing = -not (Test-Path -LiteralPath $configuredPath)
     $overridePath = Get-ProjectPathOverride -Project $Project
-    if (-not [string]::IsNullOrWhiteSpace($overridePath) -and (Test-Path -LiteralPath $overridePath)) {
-        return [pscustomobject]@{
-            Path              = $overridePath
-            Source            = "override"
-            ConfiguredPath    = $configuredPath
-            OverridePath      = $overridePath
-            ConfiguredMissing = $configuredMissing
-        }
-    }
-
-    if (Test-Path -LiteralPath $configuredPath) {
-        return [pscustomobject]@{
-            Path              = $configuredPath
-            Source            = "default"
-            ConfiguredPath    = $configuredPath
-            OverridePath      = $overridePath
-            ConfiguredMissing = $false
-        }
-    }
-
     $relativePath = Get-ProjectRelativePath -ConfiguredPath $configuredPath
     $activeRoot = Get-ActiveProjectRoot
-    if (-not [string]::IsNullOrWhiteSpace($activeRoot) -and -not [string]::IsNullOrWhiteSpace($relativePath)) {
-        if (Test-IsZohoCrmProject -Project $Project) {
-            foreach ($alias in @("CODEX_CRM", "ZOHO_CRM")) {
-                $aliasPath = Join-Path -Path $activeRoot -ChildPath $alias
-                if (Test-Path -LiteralPath $aliasPath) {
-                    return [pscustomobject]@{
-                        Path              = $aliasPath
-                        Source            = "fallback"
-                        ConfiguredPath    = $configuredPath
-                        OverridePath      = $overridePath
-                        ConfiguredMissing = $configuredMissing
-                    }
-                }
-            }
-        }
+    $source = "stale"
+    $resolvedPath = ""
+    $reason = "Configured registry path is stale on this machine."
 
-        $candidatePath = Join-Path -Path $activeRoot -ChildPath $relativePath
-        if (Test-Path -LiteralPath $candidatePath) {
-            return [pscustomobject]@{
-                Path              = $candidatePath
-                Source            = "fallback"
-                ConfiguredPath    = $configuredPath
-                OverridePath      = $overridePath
-                ConfiguredMissing = $configuredMissing
-            }
+    if (-not [string]::IsNullOrWhiteSpace($overridePath)) {
+        $resolvedPath = $overridePath
+        $source = "override"
+        if (-not (Test-Path -LiteralPath $resolvedPath)) {
+            $reason = "Local machine override path is missing."
+        } else {
+            $reason = ""
         }
+    } elseif (-not [string]::IsNullOrWhiteSpace($activeRoot) -and -not [string]::IsNullOrWhiteSpace($relativePath)) {
+        $resolvedPath = Join-Path -Path $activeRoot -ChildPath $relativePath
+        $source = "sync-root"
+        if (-not (Test-Path -LiteralPath $resolvedPath)) {
+            $reason = "Derived sync-root path is missing."
+        } else {
+            $reason = ""
+        }
+    }
 
-        return [pscustomobject]@{
-            Path              = $candidatePath
-            Source            = "missing"
-            ConfiguredPath    = $configuredPath
-            OverridePath      = $overridePath
-            ConfiguredMissing = $configuredMissing
-        }
+    $taskPath = if ([string]::IsNullOrWhiteSpace($resolvedPath)) { "" } else { Join-Path -Path $resolvedPath -ChildPath "CURRENT_TASK.md" }
+    $taskExists = (-not [string]::IsNullOrWhiteSpace($taskPath)) -and (Test-Path -LiteralPath $taskPath)
+    if ([string]::IsNullOrWhiteSpace($reason) -and -not $taskExists) {
+        $source = "stale"
+        $reason = "Resolved project path does not contain CURRENT_TASK.md."
     }
 
     return [pscustomobject]@{
-        Path              = $configuredPath
-        Source            = "missing"
+        Path              = $resolvedPath
+        Source            = $source
         ConfiguredPath    = $configuredPath
         OverridePath      = $overridePath
-        ConfiguredMissing = $configuredMissing
+        ConfiguredMissing = -not (Test-Path -LiteralPath $configuredPath)
+        TaskPath          = $taskPath
+        TaskExists        = $taskExists
+        Reason            = $reason
     }
 }
 
@@ -604,11 +416,15 @@ function Resolve-ProjectLaunchContext {
     $activeRoot = Get-ActiveProjectRoot
 
     return [pscustomobject]@{
-        ActiveProjectRoot = $activeRoot
+        CodexHubRoot      = Get-Root
+        CodexSyncRoot     = $activeRoot
         SelectedProject   = Get-Label -Project $Project
         ProjectPath       = $projectPath
+        CurrentTaskPath   = $pathInfo.TaskPath
         PathSource        = $pathInfo.Source
         ConfiguredMissing = $pathInfo.ConfiguredMissing
+        Ready             = ((-not [string]::IsNullOrWhiteSpace($projectPath)) -and (Test-Path -LiteralPath $projectPath) -and $pathInfo.TaskExists)
+        FailureReason     = $pathInfo.Reason
     }
 }
 
@@ -998,15 +814,15 @@ Set-Location -LiteralPath `$projectPath
 Write-Host '=================================' -ForegroundColor DarkCyan
 Write-Host " `$displayName" -ForegroundColor Cyan
 Write-Host '=================================' -ForegroundColor DarkCyan
-Write-Host "Active project root: $($LaunchContext.ActiveProjectRoot)" -ForegroundColor DarkCyan
+Write-Host "CodexHub root: $($LaunchContext.CodexHubRoot)" -ForegroundColor DarkCyan
+Write-Host "Codex_Sync root: $($LaunchContext.CodexSyncRoot)" -ForegroundColor DarkCyan
 Write-Host "Selected project: $($LaunchContext.SelectedProject)" -ForegroundColor DarkCyan
-Write-Host "Resolved project path: `$projectPath" -ForegroundColor DarkCyan
+Write-Host "Selected project path: `$projectPath" -ForegroundColor DarkCyan
+Write-Host "CURRENT_TASK path: $($LaunchContext.CurrentTaskPath)" -ForegroundColor DarkCyan
 Write-Host "Path source: $($LaunchContext.PathSource)" -ForegroundColor DarkCyan
-if ($($LaunchContext.ConfiguredMissing.ToString().ToLowerInvariant())) {
-    Write-Host 'Configured registry path is missing on this machine; resolved path used instead.' -ForegroundColor Yellow
-}
-Write-Host "Path: `$projectPath" -ForegroundColor Gray
-Write-Host "Context: `$startupContext" -ForegroundColor DarkGray
+Write-Host "Context: `$startupContext" -ForegroundColor Gray
+Write-Host ''
+Write-Host "Reading CURRENT_TASK from: $($LaunchContext.CurrentTaskPath)" -ForegroundColor Cyan
 Write-Host ''
 
 foreach (`$fileName in `$liteOpsFiles) {
@@ -1022,9 +838,14 @@ foreach (`$fileName in `$liteOpsFiles) {
 }
 
 if (Test-Path -LiteralPath '.\.git') {
-    Write-Host 'git status -sb' -ForegroundColor Magenta
-    Write-Host '--------------' -ForegroundColor DarkMagenta
-    git status -sb
+    `$gitBranch = (git rev-parse --abbrev-ref HEAD 2>`$null)
+    if (`$LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(`$gitBranch)) { `$gitBranch = 'unknown' }
+    `$gitHash = (git rev-parse --short HEAD 2>`$null)
+    if (`$LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(`$gitHash)) { `$gitHash = '' }
+    `$gitStatus = (git status -sb 2>`$null)
+    if (`$LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(`$gitStatus)) { `$gitStatus = 'git status failed.' }
+    Write-Host ("Git branch/hash: {0} {1}" -f `$gitBranch, `$gitHash) -ForegroundColor Magenta
+    Write-Host ("Git status: {0}" -f `$gitStatus) -ForegroundColor DarkMagenta
     Write-Host ''
 }
 
@@ -1065,13 +886,12 @@ Write-Host '=================================' -ForegroundColor DarkCyan
 Write-Host " $(Get-Label -Project $Project)" -ForegroundColor Cyan
 Write-Host '=================================' -ForegroundColor DarkCyan
 Write-Host "Resume session: $ResumeSessionId" -ForegroundColor Cyan
-Write-Host "Active project root: $($LaunchContext.ActiveProjectRoot)" -ForegroundColor DarkCyan
+Write-Host "CodexHub root: $($LaunchContext.CodexHubRoot)" -ForegroundColor DarkCyan
+Write-Host "Codex_Sync root: $($LaunchContext.CodexSyncRoot)" -ForegroundColor DarkCyan
 Write-Host "Selected project: $($LaunchContext.SelectedProject)" -ForegroundColor DarkCyan
-Write-Host "Resolved project path: `$projectPath" -ForegroundColor DarkCyan
+Write-Host "Selected project path: `$projectPath" -ForegroundColor DarkCyan
+Write-Host "CURRENT_TASK path: $($LaunchContext.CurrentTaskPath)" -ForegroundColor DarkCyan
 Write-Host "Path source: $($LaunchContext.PathSource)" -ForegroundColor DarkCyan
-if ($($LaunchContext.ConfiguredMissing.ToString().ToLowerInvariant())) {
-    Write-Host 'Configured registry path is missing on this machine; resolved path used instead.' -ForegroundColor Yellow
-}
 Write-Host ''
 
 if (Get-Command codex -ErrorAction SilentlyContinue) {
@@ -1478,14 +1298,16 @@ function Show-Header {
     $archived = @(Get-ProjectsByStatus -Projects $reg -Status @("archived")).Count
     $last = Get-LastProjectName
     $recent = @(Load-RecentProjects)
-    $activeRoot = Get-ActiveProjectRoot
+    $syncRoot = Get-ActiveProjectRoot
+    $hubRoot = Get-Root
 
     Clear-Host
     Write-Host "=============================================" -ForegroundColor DarkCyan
     Write-Host "               CODEX HUB LAUNCHER            " -ForegroundColor Cyan
     Write-Host "=============================================" -ForegroundColor DarkCyan
     Write-Host (" Active: {0}   Deprecated: {1}   Archived: {2}" -f $active, $deprecated, $archived) -ForegroundColor Gray
-    Write-Host (" Active root: {0}" -f $activeRoot) -ForegroundColor DarkCyan
+    Write-Host (" CodexHub root: {0}" -f $hubRoot) -ForegroundColor DarkCyan
+    Write-Host (" Codex_Sync root: {0}" -f $syncRoot) -ForegroundColor DarkCyan
     if ($last) {
         Write-Host (" Last: {0}" -f $last) -ForegroundColor DarkGray
     }
@@ -1505,10 +1327,15 @@ function Open-Proj {
 
     $launchContext = Resolve-ProjectLaunchContext -Project $Project
     $projectPath = $launchContext.ProjectPath
-    if (-not (Test-Path -LiteralPath $projectPath)) {
+    if (-not $launchContext.Ready) {
         Write-Host ""
-        Write-Host "Missing path: $projectPath" -ForegroundColor Yellow
+        Write-Host "Project launch blocked." -ForegroundColor Yellow
+        Write-Host ("Selected project path: {0}" -f $projectPath) -ForegroundColor Yellow
+        Write-Host ("CURRENT_TASK path: {0}" -f $launchContext.CurrentTaskPath) -ForegroundColor Yellow
         Write-Host ("Path source: {0}" -f $launchContext.PathSource) -ForegroundColor Yellow
+        if (-not [string]::IsNullOrWhiteSpace($launchContext.FailureReason)) {
+            Write-Host ("Reason: {0}" -f $launchContext.FailureReason) -ForegroundColor Yellow
+        }
         return
     }
 
@@ -1556,6 +1383,9 @@ function Open-ProjInCodexApp {
         Write-Host ""
         Write-Host "Missing path: $projectPath" -ForegroundColor Yellow
         Write-Host ("Path source: {0}" -f $pathInfo.Source) -ForegroundColor Yellow
+        if (-not [string]::IsNullOrWhiteSpace($pathInfo.Reason)) {
+            Write-Host ("Reason: {0}" -f $pathInfo.Reason) -ForegroundColor Yellow
+        }
         return
     }
 
@@ -1593,8 +1423,9 @@ function Pick-Project {
         $repoStatus = if (Test-IsGitRepo -Path $resolvedPath) { "git" } else { "folder" }
         Write-Host ("{0,2}. {1}" -f ($i + 1), (Get-Label -Project $project)) -ForegroundColor White
         Write-Host ("    {0} [{1}; source: {2}]" -f $resolvedPath, $repoStatus, $pathInfo.Source) -ForegroundColor DarkGray
-        if ($pathInfo.ConfiguredMissing) {
-            Write-Host ("    warning: configured path missing: {0}" -f $pathInfo.ConfiguredPath) -ForegroundColor Yellow
+        Write-Host ("    CURRENT_TASK: {0}" -f $pathInfo.TaskPath) -ForegroundColor DarkGray
+        if (-not [string]::IsNullOrWhiteSpace($pathInfo.Reason)) {
+            Write-Host ("    warning: {0}" -f $pathInfo.Reason) -ForegroundColor Yellow
         }
     }
 
@@ -1639,13 +1470,18 @@ function Open-CurrentTaskQuick {
         return
     }
 
-    $projectPath = Resolve-ProjectPath -Project $Project
-    $taskPath = Join-Path -Path $projectPath -ChildPath "CURRENT_TASK.md"
-    if (-not (Test-Path -LiteralPath $taskPath)) {
+    $pathInfo = Resolve-ProjectPathInfo -Project $Project
+    $projectPath = $pathInfo.Path
+    $taskPath = $pathInfo.TaskPath
+    if (-not $pathInfo.TaskExists) {
         Write-Host "CURRENT_TASK.md not found for $($Project.name)." -ForegroundColor Yellow
+        if (-not [string]::IsNullOrWhiteSpace($taskPath)) {
+            Write-Host ("Expected CURRENT_TASK path: {0}" -f $taskPath) -ForegroundColor Yellow
+        }
         return
     }
 
+    Write-Host ("Opening CURRENT_TASK: {0}" -f $taskPath) -ForegroundColor Cyan
     $taskPathLiteral = ConvertTo-SingleQuotedPowerShellLiteral -Value $taskPath
     Start-Process powershell.exe -ArgumentList @(
         "-NoExit",
@@ -1811,10 +1647,11 @@ while ($true) {
         $health = Get-ProjectHealth -Project $project -PathInfo $pathInfo -GitSummary $gitSummary -HandoffInfo $handoffInfo
         Write-Host ("{0,2}. {1}" -f $menuNumber, (Get-Label -Project $project)) -ForegroundColor White
         Write-Host ("    {0}" -f $resolvedPath) -ForegroundColor DarkGray
-        Write-Host ("    Branch: {0}; State: {1}; Last handoff: {2}; Health: {3}" -f $gitSummary.Branch, $gitSummary.State, $handoffInfo.Text, $health) -ForegroundColor DarkCyan
+        Write-Host ("    CURRENT_TASK: {0}" -f $pathInfo.TaskPath) -ForegroundColor DarkGray
+        Write-Host ("    Branch: {0}; Hash: {1}; State: {2}; Last handoff: {3}; Health: {4}" -f $gitSummary.Branch, $gitSummary.Head, $gitSummary.State, $handoffInfo.Text, $health) -ForegroundColor DarkCyan
         Write-Host ("    status: {0}; source: {1}" -f $repoStatus, $pathInfo.Source) -ForegroundColor DarkGray
-        if ($pathInfo.ConfiguredMissing) {
-            Write-Host ("    warning: configured path missing: {0}" -f $pathInfo.ConfiguredPath) -ForegroundColor Yellow
+        if (-not [string]::IsNullOrWhiteSpace($pathInfo.Reason)) {
+            Write-Host ("    warning: {0}" -f $pathInfo.Reason) -ForegroundColor Yellow
         }
     }
 
