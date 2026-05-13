@@ -65,3 +65,12 @@
   - Resume drift is classified as `CLEAN`, `WARNING`, or `BLOCKED`; only clean state uses native `codex resume <SESSION_ID>` automatically.
   - Warning or blocked state falls back to reconstruction from `CURRENT_TASK.md` instead of trusting session memory.
   - Shutdown now persists the current Codex thread ID, git summary, current task hash/timestamp, machine name, drift state, and recommended next launch mode for the next session.
+- Office Google Drive readiness update (2026-05-13):
+  - Active CodexHub root validated at `C:\GoogleDRIVE\Codex_Sync\CodexHub`.
+  - Git status was clean before this CIS documentation update and remote is `https://github.com/Sanjaymlckia/CODEX.git`.
+  - Local-only `state\machine_profile.json` override now resolves `FODE_RUNTIME` to `C:\GoogleDRIVE\Codex_Sync\FODE_Runtime_1wog`.
+  - FODE runtime repo required Git safe-directory registration for the launcher to inspect branch/status from the Google Drive path.
+  - Launcher menu renders successfully with FODE Runtime source `override`, branch `main`, state `CLEAN`, and health `AMBER`.
+  - Added roadmap and governance validation docs: `ROADMAP.md`, `CODEXHUB_ROADMAP.md`, `GOVERNANCE.md`, `RULELOG.md`, `STAGES.md`, `PIPELINE.md`, and `LIFECYCLE.md`.
+  - Roadmap now defines PASS 0 lifecycle/pipeline architecture, PASS 1 operational hardening, PASS 2 governance simplification, PASS 3 Books integration, and PASS 4 LMS convergence.
+  - Next recommended operational priority: begin FODE PASS 1 operational hardening with dashboard visibility, email observability, WhatsApp fallback, duplicate protection, and trigger/runtime telemetry.
