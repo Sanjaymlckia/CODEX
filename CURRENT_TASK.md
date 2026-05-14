@@ -2,40 +2,30 @@
 
 ## Current Objective
 
-Keep CodexHub stable in LIGHT mode while enforcing `E:\Gdrive\01 SANJAY\Codex_Sync` as the sole normal-operation root and keeping launcher bootstrap output parser-safe.
+Operate CodexHub as Hub Lite with a thin E-root-only launcher and placeholder workspace readiness.
 
 ## Current Runtime
 
 - Workspace: `E:\Gdrive\01 SANJAY\Codex_Sync\CodexHub`
 - Scope: CodexHub only
-- Default operational mode: `LIGHT`
-- Broad audit mode: `FULL_AUDIT` only when explicitly requested
-- Sole authority root: `E:\Gdrive\01 SANJAY\Codex_Sync`
+- Mode: `LIGHT`
+- Authority root: `E:\Gdrive\01 SANJAY\Codex_Sync`
 
-## Active Blockers
+## Current State
 
-- None confirmed.
-- Stop if launcher output reintroduces non-E normal-flow paths or if child bootstrap generation regresses.
+- Hub Lite target architecture is adopted.
+- Project registry uses `authority_root` plus per-project `folder` entries.
+- Placeholder project folders have been created for future launch readiness under the authority root.
+- `FODE_RUNTIME` remains the only confirmed fully active project.
+- Resume metadata is display-only.
+- No `C:\` or `D:\` roots are allowed in normal operation.
 
 ## Next Action
 
-- Keep future launcher edits limited to verified regressions and preserve the E-root-only registry discipline.
+- Confirm remotes and project purpose for placeholder workspaces before any restore-from-remote or project initialization work.
 
-## Latest Accepted Release
+## Guardrails
 
-- Current accepted hub baseline includes runtime stabilization, child-bootstrap hygiene repair, and E-root legacy-path cleanup dated `2026-05-13`.
-
-## Notes
-
-- The occasional `C:\PowerShellHistory` line seen in shell tool output was incidental child-process output from the local shell environment.
-- It was not evidence that CodexHub was running from `C:\`.
-- Root authority remains `E:\Gdrive\01 SANJAY\Codex_Sync`.
-
-## Session History
-
-- Normal LIGHT launch handoff for project selections now uses direct `powershell -> Set-Location -> codex` instead of generated child bootstrap orchestration on the hot path.
-- Missing resume state is display-only `WARNING` and no longer blocks or complicates normal project launch.
-- Child bootstrap generation now emits valid PowerShell for current-task summaries, including the exact form `$summary.Add("## $heading") | Out-Null`.
-- Startup validation and `--selftest` remain the required fast checks before trusting menu/runtime behavior.
-- Missing resume state now reports `INFO`; dirty or drifted resume conditions degrade to `RECOVERABLE`.
-- Normal launcher flow now uses only E-root active projects; non-E workspaces are archived in the registry until authoritative E-root folders exist.
+- Do not modify `FODE_Runtime_1wog` from CodexHub maintenance unless explicitly authorized by CIS.
+- Do not add fallback root scanning or generated bootstrap logic back into the normal launcher path.
+- Keep launcher behavior boring, direct, and reversible.
