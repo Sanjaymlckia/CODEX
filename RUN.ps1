@@ -72,23 +72,23 @@ function Get-ProjectLabel {
     return [string]$Project.name
 }
 
-function Get-ResumeInfoText {
-    param([object]$Project)
+function Get-CurrentTaskPreviewLines {
+    param([string]$ProjectPath)
 
-    $resumePath = Get-ResumeStatePath -ProjectName ([string]$Project.name)
-    if (-not (Test-Path -LiteralPath $resumePath)) {
-        return "INFO: no resume metadata"
+    if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
+        return @()
+    }
+
+    $taskPath = Join-Path -Path $ProjectPath -ChildPath "CURRENT_TASK.md"
+    if (-not (Test-Path -LiteralPath $taskPath)) {
+        return @()
     }
 
     try {
-        $state = Get-Content -LiteralPath $resumePath -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
-        if ($null -ne $state.timestamp -and -not [string]::IsNullOrWhiteSpace([string]$state.timestamp)) {
-            return "INFO: resume metadata present ({0})" -f [string]$state.timestamp
-        }
-
-        return "INFO: resume metadata present"
+        $matches = Select-String -Path $taskPath -Pattern '^(Last resume:|Next exact step:)' -Encoding utf8
+        return @($matches | ForEach-Object { $_.Line.Trim() })
     } catch {
-        return "WARNING: unreadable resume metadata"
+        return @()
     }
 }
 
@@ -168,7 +168,9 @@ function Show-Projects {
         Write-Host ("{0,2}. {1}" -f ($i + 1), $label) -ForegroundColor White
         Write-Host ("    status: {0}; folder: {1}; exists: {2}; {3}" -f $status, [string]$project.folder, $exists, $remoteState) -ForegroundColor DarkGray
         Write-Host ("    path: {0}" -f $projectPath) -ForegroundColor DarkGray
-        Write-Host ("    {0}" -f (Get-ResumeInfoText -Project $project)) -ForegroundColor DarkCyan
+        foreach ($line in (Get-CurrentTaskPreviewLines -ProjectPath $projectPath)) {
+            Write-Host ("    {0}" -f $line) -ForegroundColor DarkCyan
+        }
     }
 
     Write-Host ""
