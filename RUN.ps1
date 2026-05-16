@@ -120,6 +120,20 @@ function Read-Selection {
     return [Console]::ReadLine()
 }
 
+function Invoke-LocalCheck {
+    param(
+        [string]$Label,
+        [string[]]$Arguments
+    )
+
+    $hubRoot = Get-HubRoot
+    Write-Host ""
+    Write-Host ("Running: {0}" -f $Label) -ForegroundColor Cyan
+    & pwsh -NoProfile -ExecutionPolicy Bypass @Arguments
+    Write-Host ""
+    [void](Read-Selection -Prompt "Press Enter to return to menu")
+}
+
 function Start-CodexHandoff {
     param([string]$ProjectPath)
 
@@ -156,6 +170,14 @@ function Show-Header {
 
 function Show-Projects {
     param([object]$Config)
+
+    Write-Host "Checks:" -ForegroundColor Cyan
+    Write-Host " R. Resume state check" -ForegroundColor White
+    Write-Host " L. Release truth check - LO" -ForegroundColor White
+    Write-Host " M. Release truth check - MED" -ForegroundColor White
+    Write-Host " H. Release truth check - HI" -ForegroundColor White
+    Write-Host ""
+    Write-Host "Projects:" -ForegroundColor Cyan
 
     for ($i = 0; $i -lt $Config.projects.Count; $i++) {
         $project = $Config.projects[$i]
@@ -273,6 +295,25 @@ while ($true) {
 
     if ($selection -eq "0") {
         return
+    }
+
+    switch ($selection.ToUpperInvariant()) {
+        "R" {
+            Invoke-LocalCheck -Label "Resume state check" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\resume_state_check.ps1"))
+            continue
+        }
+        "L" {
+            Invoke-LocalCheck -Label "Release truth check - LO" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\release_truth_check.ps1"), "-Mode", "LO")
+            continue
+        }
+        "M" {
+            Invoke-LocalCheck -Label "Release truth check - MED" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\release_truth_check.ps1"), "-Mode", "MED")
+            continue
+        }
+        "H" {
+            Invoke-LocalCheck -Label "Release truth check - HI" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\release_truth_check.ps1"), "-Mode", "HI")
+            continue
+        }
     }
 
     if ($selection -notmatch '^\d+$') {
