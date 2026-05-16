@@ -14,3 +14,4 @@ audit/
 *.bundle
 
 state/local/
+.codexhub/release_truth/latest.json
