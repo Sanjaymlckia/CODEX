@@ -19,11 +19,11 @@ Operate CodexHub as Hub Lite with a thin E-root-only launcher and placeholder wo
 - `FODE_RUNTIME` remains the only confirmed fully active project.
 - Resume metadata is display-only.
 - No `C:\` or `D:\` roots are allowed in normal operation.
-- CIS in progress: extend release truth checker with local-first `LO`/`MED`/`HI` mode profiles while preserving read-only JSON reporting.
+- CIS in progress: add LO-only local resume state validator under `tools/` with concise JSON/report output.
 
 ## Next Action
 
-- Validate `tools/release_truth_check.ps1` in `LO`, `MED`, and `HI` modes and confirm skipped-check behavior plus JSON output shape.
+- Validate `tools/resume_state_check.ps1` and confirm local-only classification plus JSON output shape.
 
 ## Guardrails
 

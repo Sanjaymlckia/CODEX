@@ -15,3 +15,4 @@ audit/
 
 state/local/
 .codexhub/release_truth/latest.json
+.codexhub/resume_state/latest.json
