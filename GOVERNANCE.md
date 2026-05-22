@@ -17,6 +17,16 @@
 
 CodexHub should move from governance-heavy to operations-light. Do not create new mandatory rituals. Compress existing rules before adding new ones.
 
+## Refresh Context Rule
+
+When the operator says "refresh context", "reload context", or "resume context", the agent must perform a read-only project truth refresh from disk and the harness, not memory.
+
+For git-backed projects, refresh context means: print `pwd`, `git rev-parse --show-toplevel`, `git status -sb`, `git log --oneline -5`, latest relevant staging tag, `CURRENT_TASK.md` summary, `AGENTS.md` summary if present, and `Config.js` version fields when release-related. Live Admin/Student `whoami` checks are only for deployment or release work.
+
+For non-git projects, refresh context means: confirm the registered project root, read `CURRENT_TASK.md` or `PROJECT_STATE.md` if present, read `AGENTS.md` if present, and report the last known baseline, blockers, and next safe step. Do not scan the whole project unless explicitly requested.
+
+The response must stay concise: project, registered root, actual git root if any, git state, latest release/tag, runtime version if relevant, dirty files, current task, warnings, and next safe step. Refresh context must not modify files.
+
 ## Operational Trust Priority
 
 Operational trust is now more important than feature velocity. PASS 1 should prioritize dashboard visibility, email observability, WhatsApp fallback, duplicate protection, and runtime telemetry before broader integrations.

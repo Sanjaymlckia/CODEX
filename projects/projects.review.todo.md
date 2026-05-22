@@ -14,7 +14,7 @@ These paths are currently valid.
 
 | Project | Current Valid Path | Notes |
 |---|---|---|
-| FODE_RUNTIME | E:\Gdrive\01 SANJAY\Codex_Sync\FODE_Runtime_1wog | Canonical synced project; git-backed |
+| FODE_RUNTIME | E:\Gdrive\01_SANJAY\Codex_Sync\FODE_Runtime_1wog | Canonical synced project; git-backed |
 | DATA_GOVERNANCE | D:\CODEX_PROJECTS\DATA_GOVERNANCE | Valid home path; git-backed |
 | CODEX_FORMS | D:\CODEX_PROJECTS\CODEX_FORMS | Valid home path; not git-backed |
 | DHERST_Audit_Review | D:\CODEX_PROJECTS\DHERST_Audit_Review | Valid home path; not git-backed |
@@ -41,7 +41,7 @@ These registry entries did not resolve to valid home folders after removing the 
 
 Consider moving later to:
 
-E:\Gdrive\01 SANJAY\Codex_Sync
+E:\Gdrive\01_SANJAY\Codex_Sync
 
 | Project | Current Path | Priority |
 |---|---|---|
@@ -61,12 +61,12 @@ E:\Gdrive\01 SANJAY\Codex_Sync
 3. Git-backed projects require clean git status before migration.
 4. Non-git projects should be git-initialized or copied with manifest before migration.
 5. FODE_RUNTIME remains canonical at:
-   E:\Gdrive\01 SANJAY\Codex_Sync\FODE_Runtime_1wog
+   E:\Gdrive\01_SANJAY\Codex_Sync\FODE_Runtime_1wog
 6. CODEX_CRM must not be used as fallback for unrelated projects.
 7. Future resolver logic must support:
    - home root: D:\CODEX_PROJECTS
    - office root: C:\CODEX_PROJECTS
-   - sync root: E:\Gdrive\01 SANJAY\Codex_Sync
+   - sync root: E:\Gdrive\01_SANJAY\Codex_Sync
 
 ---
 

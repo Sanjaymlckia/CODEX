@@ -33,6 +33,15 @@ function Get-ResumeStatePath {
     return Join-Path -Path (Get-StateRoot) -ChildPath ("{0}_resume_state.json" -f $ProjectName)
 }
 
+function Get-ProjectStatePath {
+    param(
+        [string]$ProjectName,
+        [string]$Suffix
+    )
+
+    return Join-Path -Path (Get-StateRoot) -ChildPath ("{0}_{1}" -f $ProjectName, $Suffix)
+}
+
 function Read-Registry {
     $path = Get-RegistryPath
     if (-not (Test-Path -LiteralPath $path)) {
@@ -134,15 +143,136 @@ function Invoke-LocalCheck {
     [void](Read-Selection -Prompt "Press Enter to return to menu")
 }
 
+function Set-ProjectLaunchState {
+    param(
+        [string]$ProjectName,
+        [string]$ProjectPath,
+        [string]$Profile,
+        [string]$ResumeCommand
+    )
+
+    $stateRoot = Get-StateRoot
+    if (-not (Test-Path -LiteralPath $stateRoot)) {
+        New-Item -ItemType Directory -Path $stateRoot | Out-Null
+    }
+
+    Set-Content -LiteralPath (Get-ProjectStatePath -ProjectName $ProjectName -Suffix "last_profile.txt") -Value $Profile -Encoding utf8
+    Set-Content -LiteralPath (Get-ProjectStatePath -ProjectName $ProjectName -Suffix "last_project_root.txt") -Value $ProjectPath -Encoding utf8
+    if (-not [string]::IsNullOrWhiteSpace($ResumeCommand)) {
+        Set-Content -LiteralPath (Get-ProjectStatePath -ProjectName $ProjectName -Suffix "last_resume_command.txt") -Value $ResumeCommand -Encoding utf8
+    }
+}
+
+function Get-GitValue {
+    param(
+        [string]$ProjectPath,
+        [string[]]$Arguments
+    )
+
+    if (-not (Test-Path -LiteralPath (Join-Path -Path $ProjectPath -ChildPath ".git"))) {
+        return ""
+    }
+
+    try {
+        $output = @(& git -C $ProjectPath @Arguments 2>$null)
+        if ($LASTEXITCODE -ne 0) { return "" }
+        return ($output -join "`n").Trim()
+    } catch {
+        return ""
+    }
+}
+
+function Get-LastResumeCommand {
+    param(
+        [string]$ProjectName,
+        [string]$ProjectPath
+    )
+
+    $statePath = Get-ProjectStatePath -ProjectName $ProjectName -Suffix "last_resume_command.txt"
+    if (Test-Path -LiteralPath $statePath) {
+        $value = (Get-Content -LiteralPath $statePath -Raw -Encoding utf8).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value
+        }
+    }
+
+    $resumeState = Get-ResumeStatePath -ProjectName $ProjectName
+    if (Test-Path -LiteralPath $resumeState) {
+        try {
+            $state = Get-Content -LiteralPath $resumeState -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+            if ($null -ne $state.PSObject.Properties["resume_command"] -and -not [string]::IsNullOrWhiteSpace([string]$state.resume_command)) {
+                return [string]$state.resume_command
+            }
+            if ($null -ne $state.PSObject.Properties["thread_id"] -and -not [string]::IsNullOrWhiteSpace([string]$state.thread_id)) {
+                return "codex resume " + [string]$state.thread_id
+            }
+        } catch {
+            return ""
+        }
+    }
+
+    return ""
+}
+
+function Update-SessionContext {
+    param(
+        [object]$Config,
+        [object]$Project,
+        [string]$Profile
+    )
+
+    $projectPath = Get-ProjectPath -AuthorityRoot ([string]$Config.authority_root) -Project $Project
+    $contextRoot = Join-Path -Path $projectPath -ChildPath ".codexhub"
+    if (-not (Test-Path -LiteralPath $contextRoot)) {
+        New-Item -ItemType Directory -Path $contextRoot | Out-Null
+    }
+
+    $taskPath = Join-Path -Path $projectPath -ChildPath "CURRENT_TASK.md"
+    $agentsPath = Join-Path -Path $projectPath -ChildPath "AGENTS.md"
+    $commit = Get-GitValue -ProjectPath $projectPath -Arguments @("log", "-1", "--pretty=%h %s")
+    $tag = Get-GitValue -ProjectPath $projectPath -Arguments @("describe", "--tags", "--abbrev=0")
+    $resumeCommand = Get-LastResumeCommand -ProjectName ([string]$Project.name) -ProjectPath $projectPath
+
+    $lines = @(
+        "# CodexHub Session Context",
+        "",
+        "Context support only. The project CURRENT_TASK.md and AGENTS.md remain authoritative.",
+        "",
+        ("Project key: {0}" -f [string]$Project.name),
+        ("Registered root: {0}" -f $projectPath),
+        ("Authoritative CURRENT_TASK.md: {0}" -f $taskPath),
+        ("Authoritative AGENTS.md: {0}" -f ($(if (Test-Path -LiteralPath $agentsPath) { $agentsPath } else { "not present" }))),
+        ("Latest known commit/tag: {0}" -f ($(if ([string]::IsNullOrWhiteSpace($tag)) { $commit } else { "$commit / $tag" }))),
+        "Last known runtime/version: refresh context for current release truth",
+        ("Last resume command: {0}" -f ($(if ([string]::IsNullOrWhiteSpace($resumeCommand)) { "not recorded" } else { $resumeCommand }))),
+        ("Selected launch profile: {0}" -f $Profile),
+        "",
+        "Do not update CodexHub CURRENT_TASK.md for project work. Read and write the project CURRENT_TASK.md and AGENTS.md in the registered root."
+    )
+
+    $contextPath = Join-Path -Path $contextRoot -ChildPath "SESSION_CONTEXT.md"
+    Set-Content -LiteralPath $contextPath -Value $lines -Encoding utf8
+    return $contextPath
+}
+
 function Start-CodexHandoff {
-    param([string]$ProjectPath)
+    param(
+        [string]$ProjectPath,
+        [string]$Profile = "default",
+        [string]$ResumeCommand = ""
+    )
 
     $literal = "'" + $ProjectPath.Replace("'", "''") + "'"
+    $codexCommand = "codex"
+    if (-not [string]::IsNullOrWhiteSpace($ResumeCommand)) {
+        $codexCommand = $ResumeCommand
+    }
+
     Start-Process powershell.exe -ArgumentList @(
         "-NoExit",
         "-ExecutionPolicy", "Bypass",
         "-Command",
-        "Set-Location -LiteralPath $literal; codex"
+        "Set-Location -LiteralPath $literal; Write-Host 'CodexHub profile: $Profile'; $codexCommand"
     ) | Out-Null
 }
 
@@ -171,12 +301,6 @@ function Show-Header {
 function Show-Projects {
     param([object]$Config)
 
-    Write-Host "Checks:" -ForegroundColor Cyan
-    Write-Host " R. Resume state check" -ForegroundColor White
-    Write-Host " L. Release truth check - LO" -ForegroundColor White
-    Write-Host " M. Release truth check - MED" -ForegroundColor White
-    Write-Host " H. Release truth check - HI" -ForegroundColor White
-    Write-Host ""
     Write-Host "Projects:" -ForegroundColor Cyan
 
     for ($i = 0; $i -lt $Config.projects.Count; $i++) {
@@ -196,8 +320,41 @@ function Show-Projects {
     }
 
     Write-Host ""
+    Write-Host "Checks:" -ForegroundColor Cyan
+    Write-Host " R. Resume state check" -ForegroundColor White
+    Write-Host " A. Advanced checks" -ForegroundColor White
+    Write-Host ""
     Write-Host "0. Exit" -ForegroundColor Cyan
     Write-Host ""
+}
+
+function Show-AdvancedChecks {
+    Write-Host ""
+    Write-Host "Advanced checks:" -ForegroundColor Cyan
+    Write-Host " 1. Release truth LO" -ForegroundColor White
+    Write-Host " 2. Release truth MED" -ForegroundColor White
+    Write-Host " 3. Release truth HI" -ForegroundColor White
+    Write-Host " 4. Drift audit" -ForegroundColor White
+    Write-Host " 0. Back" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+function Open-AdvancedChecks {
+    while ($true) {
+        Show-AdvancedChecks
+        $selection = Read-Selection -Prompt "Select advanced check"
+        switch ($selection) {
+            "0" { return }
+            "1" { Invoke-LocalCheck -Label "Release truth check - LO" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\release_truth_check.ps1"), "-Mode", "LO"); return }
+            "2" { Invoke-LocalCheck -Label "Release truth check - MED" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\release_truth_check.ps1"), "-Mode", "MED"); return }
+            "3" { Invoke-LocalCheck -Label "Release truth check - HI" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\release_truth_check.ps1"), "-Mode", "HI"); return }
+            "4" { Invoke-LocalCheck -Label "Drift audit" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\drift-audit.ps1")); return }
+            default {
+                Write-Host "Invalid selection." -ForegroundColor Yellow
+                Start-Sleep -Seconds 1
+            }
+        }
+    }
 }
 
 function Open-Project {
@@ -226,6 +383,144 @@ function Open-Project {
     }
 
     return $false
+}
+
+function Show-ProjectMenu {
+    param(
+        [object]$Config,
+        [object]$Project
+    )
+
+    $label = Get-ProjectLabel -Project $Project
+    $projectPath = Get-ProjectPath -AuthorityRoot ([string]$Config.authority_root) -Project $Project
+    Write-Host ""
+    Write-Host $label -ForegroundColor Cyan
+    Write-Host ("Registered root: {0}" -f $projectPath) -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host " 1. Open Codex App / GUI in this project" -ForegroundColor White
+    Write-Host " 2. Launch Codex CLI - default profile" -ForegroundColor White
+    Write-Host " 3. Launch Codex CLI - 5.4 Low" -ForegroundColor White
+    Write-Host " 4. Launch Codex CLI - 5.5 Low" -ForegroundColor White
+    Write-Host " 5. Launch Codex CLI - 5.5 High" -ForegroundColor White
+    Write-Host " 6. Resume last Codex session" -ForegroundColor White
+    Write-Host " 7. Project state authority check" -ForegroundColor White
+    Write-Host " 8. Refresh context / quick truth check" -ForegroundColor White
+    Write-Host " 9. Advanced checks" -ForegroundColor White
+    Write-Host " 0. Back" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+function Open-GuiContext {
+    param(
+        [object]$Config,
+        [object]$Project
+    )
+
+    $projectPath = Get-ProjectPath -AuthorityRoot ([string]$Config.authority_root) -Project $Project
+    if (-not (Test-Path -LiteralPath $projectPath)) {
+        Write-Host ("Project folder missing: {0}" -f $projectPath) -ForegroundColor Yellow
+        return
+    }
+
+    Set-LastProjectName -Name ([string]$Project.name)
+    Set-ProjectLaunchState -ProjectName ([string]$Project.name) -ProjectPath $projectPath -Profile "Codex App / GUI" -ResumeCommand ""
+    $contextPath = Update-SessionContext -Config $Config -Project $Project -Profile "Codex App / GUI"
+    Write-Host ""
+    Write-Host "Codex App / GUI context is ready." -ForegroundColor Cyan
+    Write-Host ("Project root: {0}" -f $projectPath) -ForegroundColor White
+    Write-Host ("Session context: {0}" -f $contextPath) -ForegroundColor White
+    Write-Host "Open the GUI on the project root above. The GUI must read/write that project's CURRENT_TASK.md and AGENTS.md, not CodexHub CURRENT_TASK.md." -ForegroundColor Yellow
+}
+
+function Invoke-RefreshContext {
+    param(
+        [object]$Config,
+        [object]$Project,
+        [switch]$AuthorityOnly
+    )
+
+    $args = @(
+        "-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\refresh-context.ps1"),
+        "-ProjectName", ([string]$Project.name)
+    )
+    if ($AuthorityOnly) {
+        $args += "-AuthorityOnly"
+    }
+
+    Invoke-LocalCheck -Label "Refresh context" -Arguments $args
+}
+
+function Open-ProjectMenu {
+    param(
+        [object]$Config,
+        [object]$Project
+    )
+
+    $projectPath = Get-ProjectPath -AuthorityRoot ([string]$Config.authority_root) -Project $Project
+    if (-not (Test-Path -LiteralPath $projectPath)) {
+        [void](Open-Project -Config $Config -Project $Project)
+        return
+    }
+
+    while ($true) {
+        Show-ProjectMenu -Config $Config -Project $Project
+        $selection = Read-Selection -Prompt "Select project action"
+        switch ($selection) {
+            "0" { return }
+            "1" {
+                Open-GuiContext -Config $Config -Project $Project
+                [void](Read-Selection -Prompt "Press Enter to return to menu")
+            }
+            "2" {
+                Set-LastProjectName -Name ([string]$Project.name)
+                Set-ProjectLaunchState -ProjectName ([string]$Project.name) -ProjectPath $projectPath -Profile "default" -ResumeCommand ""
+                [void](Update-SessionContext -Config $Config -Project $Project -Profile "default")
+                Start-CodexHandoff -ProjectPath $projectPath -Profile "default"
+                return
+            }
+            "3" {
+                Set-LastProjectName -Name ([string]$Project.name)
+                Set-ProjectLaunchState -ProjectName ([string]$Project.name) -ProjectPath $projectPath -Profile "5.4 Low" -ResumeCommand ""
+                [void](Update-SessionContext -Config $Config -Project $Project -Profile "5.4 Low")
+                Start-CodexHandoff -ProjectPath $projectPath -Profile "5.4 Low"
+                return
+            }
+            "4" {
+                Set-LastProjectName -Name ([string]$Project.name)
+                Set-ProjectLaunchState -ProjectName ([string]$Project.name) -ProjectPath $projectPath -Profile "5.5 Low" -ResumeCommand ""
+                [void](Update-SessionContext -Config $Config -Project $Project -Profile "5.5 Low")
+                Start-CodexHandoff -ProjectPath $projectPath -Profile "5.5 Low"
+                return
+            }
+            "5" {
+                Set-LastProjectName -Name ([string]$Project.name)
+                Set-ProjectLaunchState -ProjectName ([string]$Project.name) -ProjectPath $projectPath -Profile "5.5 High" -ResumeCommand ""
+                [void](Update-SessionContext -Config $Config -Project $Project -Profile "5.5 High")
+                Start-CodexHandoff -ProjectPath $projectPath -Profile "5.5 High"
+                return
+            }
+            "6" {
+                $resumeCommand = Get-LastResumeCommand -ProjectName ([string]$Project.name) -ProjectPath $projectPath
+                if ([string]::IsNullOrWhiteSpace($resumeCommand)) {
+                    Write-Host "No resume command is recorded for this project." -ForegroundColor Yellow
+                    [void](Read-Selection -Prompt "Press Enter to return to menu")
+                    continue
+                }
+                Set-LastProjectName -Name ([string]$Project.name)
+                Set-ProjectLaunchState -ProjectName ([string]$Project.name) -ProjectPath $projectPath -Profile "resume" -ResumeCommand $resumeCommand
+                [void](Update-SessionContext -Config $Config -Project $Project -Profile "resume")
+                Start-CodexHandoff -ProjectPath $projectPath -Profile "resume" -ResumeCommand $resumeCommand
+                return
+            }
+            "7" { Invoke-RefreshContext -Config $Config -Project $Project -AuthorityOnly }
+            "8" { Invoke-RefreshContext -Config $Config -Project $Project }
+            "9" { Open-AdvancedChecks }
+            default {
+                Write-Host "Invalid selection." -ForegroundColor Yellow
+                Start-Sleep -Seconds 1
+            }
+        }
+    }
 }
 
 function Invoke-SelfTest {
@@ -302,16 +597,8 @@ while ($true) {
             Invoke-LocalCheck -Label "Resume state check" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\resume_state_check.ps1"))
             continue
         }
-        "L" {
-            Invoke-LocalCheck -Label "Release truth check - LO" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\release_truth_check.ps1"), "-Mode", "LO")
-            continue
-        }
-        "M" {
-            Invoke-LocalCheck -Label "Release truth check - MED" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\release_truth_check.ps1"), "-Mode", "MED")
-            continue
-        }
-        "H" {
-            Invoke-LocalCheck -Label "Release truth check - HI" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\release_truth_check.ps1"), "-Mode", "HI")
+        "A" {
+            Open-AdvancedChecks
             continue
         }
     }
@@ -329,10 +616,6 @@ while ($true) {
         continue
     }
 
-    if (Open-Project -Config $config -Project $config.projects[$index]) {
-        return
-    }
-
-    [void](Read-Selection -Prompt "Press Enter to return to menu")
+    Open-ProjectMenu -Config $config -Project $config.projects[$index]
 }
 
