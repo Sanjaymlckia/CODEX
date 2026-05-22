@@ -1,7 +1,7 @@
 # CODEX Hub Lite
 
 Thin launcher for Codex workspaces under the single authority root:
-`E:\Gdrive\01 SANJAY\Codex_Sync`
+`E:\Gdrive\01_SANJAY\Codex_Sync`
 
 ## Run
 
@@ -21,7 +21,7 @@ powershell -ExecutionPolicy Bypass -File .\RUN.ps1 -SelfTest
 
 ```json
 {
-  "authority_root": "E:\\Gdrive\\01 SANJAY\\Codex_Sync",
+  "authority_root": "E:\\Gdrive\\01_SANJAY\\Codex_Sync",
   "projects": [
     {
       "name": "FODE_RUNTIME",
@@ -50,3 +50,4 @@ Rules:
 - Launches Codex with direct PowerShell handoff only.
 - Resume metadata is display-only and never blocks launch.
 - Restore-from-remote is future work. If a missing project has a remote, the launcher reports that the remote is available, but does not clone automatically in this build.
+

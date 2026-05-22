@@ -1,4 +1,4 @@
-﻿# CodexHub Project Resolver Audit
+# CodexHub Project Resolver Audit
 # SAFE: no project moves, no registry mutation unless explicitly copied later
 
 $CodexRoot = "D:\CODEX"
@@ -12,7 +12,7 @@ $Report = Join-Path $OutDir "resolver_normalization_report.txt"
 $PreviewJson = Join-Path $OutDir "projects.normalized.preview.json"
 
 $CandidateRoots = @(
-    "E:\Gdrive\01 SANJAY\Codex_Sync",
+    "E:\Gdrive\01_SANJAY\Codex_Sync",
     "D:\CODEX_PROJECTS",
     "C:\CODEX_PROJECTS"
 )
@@ -103,7 +103,7 @@ foreach ($p in $projects) {
             Log " - $f [$git]"
         }
 
-        $preferred = $found | Where-Object { $_ -like "E:\Gdrive\01 SANJAY\Codex_Sync\*" } | Select-Object -First 1
+        $preferred = $found | Where-Object { $_ -like "E:\Gdrive\01_SANJAY\Codex_Sync\*" } | Select-Object -First 1
         if (!$preferred) { $preferred = $found | Where-Object { $_ -like "D:\CODEX_PROJECTS\*" } | Select-Object -First 1 }
         if (!$preferred) { $preferred = $found | Where-Object { $_ -like "C:\CODEX_PROJECTS\*" } | Select-Object -First 1 }
         if (!$preferred) { $preferred = $found | Select-Object -First 1 }
@@ -123,7 +123,7 @@ foreach ($p in $projects) {
             preferred_path = $preferred
             candidates     = @($found)
             home_root      = "D:\CODEX_PROJECTS"
-            sync_root      = "E:\Gdrive\01 SANJAY\Codex_Sync"
+            sync_root      = "E:\Gdrive\01_SANJAY\Codex_Sync"
             office_root    = "C:\CODEX_PROJECTS"
         }
     }
@@ -139,3 +139,4 @@ Log "Report: $Report"
 Log "Preview normalized registry: $PreviewJson"
 Log "No files were moved."
 Log "Original projects.json was not changed."
+

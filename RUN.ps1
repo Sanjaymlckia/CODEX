@@ -246,7 +246,7 @@ function Invoke-SelfTest {
 
     try {
         $config = Read-Registry
-        if ([string]$config.authority_root -ne "E:\Gdrive\01 SANJAY\Codex_Sync") {
+        if ([string]$config.authority_root -ne "E:\Gdrive\01_SANJAY\Codex_Sync") {
             $errors.Add("authority_root mismatch") | Out-Null
         }
 
@@ -335,3 +335,4 @@ while ($true) {
 
     [void](Read-Selection -Prompt "Press Enter to return to menu")
 }
+

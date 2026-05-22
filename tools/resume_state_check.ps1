@@ -207,7 +207,7 @@ function Get-PathConsistency {
         }
     }
 
-    $appearsUnderAuthorityRoot = $normalizedRepoRoot.StartsWith("E:\Gdrive\01 SANJAY\Codex_Sync", [System.StringComparison]::OrdinalIgnoreCase)
+    $appearsUnderAuthorityRoot = $normalizedRepoRoot.StartsWith("E:\Gdrive\01_SANJAY\Codex_Sync", [System.StringComparison]::OrdinalIgnoreCase)
 
     [pscustomobject]@{
         repo_root = $normalizedRepoRoot
@@ -400,3 +400,4 @@ if ($warnings.Count -gt 0) {
     Write-Host ("Warnings: {0}" -f ($warningsArray -join " | "))
 }
 Write-Host ("JSON: {0}" -f $reportPath)
+
