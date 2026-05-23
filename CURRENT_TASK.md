@@ -32,3 +32,15 @@ Operate CodexHub as Hub Lite with a thin E-root-only launcher and placeholder wo
 - Keep launcher behavior boring, direct, and reversible.
 - "Refresh context", "reload context", and "resume context" mean read-only project truth refresh from the registered project root, not memory and not CodexHub's own CURRENT_TASK.md.
 
+## GDrive Rename Path Authority Check
+
+Active local authority root confirmed by operator:
+
+`E:\Gdrive\01_SANJAY\Codex_Sync`
+
+Old local root no longer exists:
+
+`E:\Gdrive\01 SANJAY`
+
+CodexHub path audit found active authority references already updated. Corrective cleanup targeted stale legacy examples, broad deprecated-root detection, and fallback-path wording only. No FODE runtime, Apps Script deployment, Sheets, or Drive content changes authorized.
+

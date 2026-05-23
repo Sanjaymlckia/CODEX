@@ -4,11 +4,20 @@ Portable CODEX Hub commands. Run these from the active hub root.
 
 ## Launch
 
+Current startup:
+
+```powershell
+cd "E:\Gdrive\01_SANJAY\Codex_Sync\CodexHub"
+.\RUN.ps1
+```
+
+From the active hub root:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\RUN.ps1
 ```
 
-Known hub roots:
+Historical/deprecated hub roots:
 
 - `D:\CODEX`
 - `C:\CODEX`
@@ -17,15 +26,17 @@ Known hub roots:
 
 Current live machine:
 
-- Hub: `D:\CODEX`
-- Projects: `D:\CODEX_PROJECTS`
-- Registry: `D:\CODEX\projects\projects.json`
-- Prompts: `D:\CODEX\prompts`
+- Hub: `E:\Gdrive\01_SANJAY\Codex_Sync\CodexHub`
+- Authority root: `E:\Gdrive\01_SANJAY\Codex_Sync`
+- Registry: `E:\Gdrive\01_SANJAY\Codex_Sync\CodexHub\projects\projects.json`
+- Prompts: `E:\Gdrive\01_SANJAY\Codex_Sync\CodexHub\prompts`
 
-Alternate machine root:
+Historical/deprecated examples:
 
 - Hub: `C:\CODEX`
 - Projects: `C:\CODEX_PROJECTS`
+- Hub: `D:\CODEX`
+- Projects: `D:\CODEX_PROJECTS`
 
 ## Quick Checks
 
@@ -35,7 +46,7 @@ Get-Content .\projects\projects.json
 Get-Content .\state\machine_profile.json
 ```
 
-Check resolved project folders on the live machine:
+Historical project-folder examples only:
 
 ```powershell
 Get-ChildItem D:\CODEX_PROJECTS

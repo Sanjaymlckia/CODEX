@@ -62,7 +62,11 @@ if (-not (Test-Path -LiteralPath $ProjectPath)) {
         if (-not ((Test-TextContains -Path $taskPath -Pattern "Known Risks") -or (Test-TextContains -Path $taskPath -Pattern "Open Risks"))) {
             Add-Result "WARN" "Handoff Drift" "CURRENT_TASK.md does not list known/open risks."
         }
-        foreach ($deprecatedPath in @("D:\CODEX_PROJECTS", "E:\CODEX_PROJECTS", "E:\Gdrive")) {
+        foreach ($deprecatedPath in @(
+            "D:\CODEX_PROJECTS",
+            "E:\CODEX_PROJECTS",
+            "E:\Gdrive\01 SANJAY"
+        )) {
             if ((Test-TextContains -Path $taskPath -Pattern $deprecatedPath) -and $ProjectPath -notlike "$deprecatedPath*") {
                 Add-Result "WARN" "Path Drift" "CURRENT_TASK.md references possible stale path $deprecatedPath."
             }

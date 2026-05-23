@@ -10,18 +10,22 @@ Files in scope: <enumerated>
 
 Valid workspace if ALL are true:
 - current folder name is DHERST_Audit_Review
-- parent folder name is CODEX_PROJECTS
+- preferred current CodexHub authority root is E:\Gdrive\01_SANJAY\Codex_Sync
+- historical fallback paths may be used only after physical verification
 - drive is C:, D:, or E:
 
-Accepted examples:
+Preferred current CodexHub authority root:
+E:\Gdrive\01_SANJAY\Codex_Sync
+
+Historical fallback examples:
 C:\CODEX_PROJECTS\DHERST_Audit_Review
 D:\CODEX_PROJECTS\DHERST_Audit_Review
 E:\CODEX_PROJECTS\DHERST_Audit_Review
 
 If workspace validation fails, stop with:
 Invalid workspace.
-Expected:
-<Drive>:\CODEX_PROJECTS\DHERST_Audit_Review
+Expected preferred pattern:
+E:\Gdrive\01_SANJAY\Codex_Sync\<ProjectFolder>
 
 Never hardcode drive letters in harness governance. Validate by project identity:
-<ProjectRoot>\CODEX_PROJECTS\<ProjectName>
+<AuthorityRoot>\<ProjectName>

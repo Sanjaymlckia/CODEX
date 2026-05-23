@@ -112,6 +112,7 @@ $rootMatches = if ($isGit -and -not [string]::IsNullOrWhiteSpace($actualGitRoot)
 $oldPathWarnings = New-Object System.Collections.Generic.List[string]
 foreach ($path in @($taskPath, $agentsPath, $configPath)) {
     if (Test-Path -LiteralPath $path) {
+        # Detect stale legacy FODE/Codex roots only. The active authority root is E:\Gdrive\01_SANJAY\Codex_Sync.
         $matches = Select-String -Path $path -Pattern 'E:\\Gdrive\\01 SANJAY\\Codex_Sync|C:\\FODE_Runtime_1wog|D:\\CODEX_PROJECTS\\FODE_Runtime' -Encoding utf8 -ErrorAction SilentlyContinue
         foreach ($match in @($matches)) {
             $oldPathWarnings.Add(("{0}:{1}" -f $path, $match.LineNumber)) | Out-Null

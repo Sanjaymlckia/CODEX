@@ -1,7 +1,7 @@
 # CodexHub Project Resolver Audit
 # SAFE: no project moves, no registry mutation unless explicitly copied later
 
-$CodexRoot = "D:\CODEX"
+$CodexRoot = Split-Path -Parent $PSScriptRoot
 $ProjectsJson = Join-Path $CodexRoot "projects\projects.json"
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $OutDir = Join-Path $CodexRoot "audit\resolver_normalization_$Timestamp"
@@ -11,6 +11,8 @@ New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $Report = Join-Path $OutDir "resolver_normalization_report.txt"
 $PreviewJson = Join-Path $OutDir "projects.normalized.preview.json"
 
+# Authority root: E:\Gdrive\01_SANJAY\Codex_Sync
+# Legacy fallback roots below are for discovery only and must not override authority-root matches.
 $CandidateRoots = @(
     "E:\Gdrive\01_SANJAY\Codex_Sync",
     "D:\CODEX_PROJECTS",
