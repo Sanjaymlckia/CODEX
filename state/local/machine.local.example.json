@@ -1,0 +1,4 @@
+﻿{
+  "authority_root": "C:\\Path\\To\\Codex_Sync",
+  "machine_note": "Copy this file to machine.local.json and set authority_root for this machine. Do not commit machine.local.json."
+}

@@ -42,6 +42,43 @@ function Get-ProjectStatePath {
     return Join-Path -Path (Get-StateRoot) -ChildPath ("{0}_{1}" -f $ProjectName, $Suffix)
 }
 
+
+function Get-LocalMachineConfigPath {
+    return Join-Path -Path (Get-HubRoot) -ChildPath "state\local\machine.local.json"
+}
+
+function Resolve-AuthorityRoot {
+    param(
+        [object]$Config
+    )
+
+    $localPath = Get-LocalMachineConfigPath
+    if (Test-Path -LiteralPath $localPath) {
+        try {
+            $localRaw = Get-Content -LiteralPath $localPath -Raw -Encoding utf8
+            $localConfig = $localRaw | ConvertFrom-Json -ErrorAction Stop
+            $localRoot = [string]$localConfig.authority_root
+
+            if (-not [string]::IsNullOrWhiteSpace($localRoot) -and (Test-Path -LiteralPath $localRoot)) {
+                return $localRoot
+            }
+        } catch {
+            # An invalid local override does not suppress portable fallbacks.
+        }
+    }
+
+    $registryRoot = [string]$Config.authority_root
+    if (-not [string]::IsNullOrWhiteSpace($registryRoot) -and (Test-Path -LiteralPath $registryRoot)) {
+        return $registryRoot
+    }
+
+    $derivedRoot = Split-Path -Parent (Get-HubRoot)
+    if (-not [string]::IsNullOrWhiteSpace($derivedRoot) -and (Test-Path -LiteralPath $derivedRoot)) {
+        return $derivedRoot
+    }
+
+    throw "Unable to resolve a valid CodexHub authority root from local override, project registry, or the CodexHub parent folder."
+}
 function Read-Registry {
     $path = Get-RegistryPath
     if (-not (Test-Path -LiteralPath $path)) {
@@ -51,13 +88,10 @@ function Read-Registry {
     $raw = Get-Content -LiteralPath $path -Raw -Encoding utf8
     $config = $raw | ConvertFrom-Json -ErrorAction Stop
 
-    if ([string]::IsNullOrWhiteSpace([string]$config.authority_root)) {
-        throw "Registry authority_root is required."
-    }
-
     if ($null -eq $config.projects) {
         throw "Registry projects array is required."
     }
+    $config.authority_root = Resolve-AuthorityRoot -Config $config
 
     return $config
 }
@@ -541,8 +575,8 @@ function Invoke-SelfTest {
 
     try {
         $config = Read-Registry
-        if ([string]$config.authority_root -ne "E:\Gdrive\01_SANJAY\Codex_Sync") {
-            $errors.Add("authority_root mismatch") | Out-Null
+        if (-not (Test-Path -LiteralPath ([string]$config.authority_root))) {
+            $errors.Add(("authority_root missing: {0}" -f [string]$config.authority_root)) | Out-Null
         }
 
         $json = Get-Content -LiteralPath (Get-RegistryPath) -Raw -Encoding utf8

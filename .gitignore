@@ -13,6 +13,13 @@ audit/
 
 *.bundle
 
-state/local/
+state/local/*
+!state/local/machine.local.example.json
 .codexhub/release_truth/latest.json
 .codexhub/resume_state/latest.json
+
+# Local machine-specific CodexHub override
+state/local/machine.local.json
+
+# Google Drive / sync conflict duplicates
+* (1).*
