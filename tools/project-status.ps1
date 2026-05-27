@@ -4,7 +4,9 @@ param(
     [string]$StateRoot = "",
     [ValidateSet("authoritative", "full")]
     [string]$CurrentTaskReadMode = "authoritative",
-    [switch]$AsJson
+    [switch]$AsJson,
+    [switch]$SaveStateBackup,
+    [string]$OperatorNote = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,6 +36,8 @@ function Get-GitInfo {
             latest_commit = ""
             latest_commit_hash = ""
             latest_commit_message = ""
+            latest_staging_tag = ""
+            changed_files = @()
             upstream = ""
             ahead = $null
             behind = $null
@@ -71,6 +75,8 @@ function Get-GitInfo {
             latest_commit = ""
             latest_commit_hash = ""
             latest_commit_message = ""
+            latest_staging_tag = ""
+            changed_files = @()
             upstream = ""
             ahead = $null
             behind = $null
@@ -90,6 +96,19 @@ function Get-GitInfo {
     $commitHash = if ($commitHashResult.code -eq 0) { ($commitHashResult.output -join "`n").Trim() } else { "" }
     $commitMessageResult = Invoke-GitRead -GitArgs @("log", "-1", "--pretty=%s")
     $commitMessage = if ($commitMessageResult.code -eq 0) { ($commitMessageResult.output -join "`n").Trim() } else { "" }
+    $changedFiles = if ($porcelainResult.code -eq 0) {
+        @($porcelainResult.output | ForEach-Object {
+            if ($_.Length -gt 3) { $_.Substring(3).Trim() } else { $_.Trim() }
+        })
+    } else {
+        @("Unable to read changed files.")
+    }
+    $tagResult = Invoke-GitRead -GitArgs @("tag", "--list", "--sort=-creatordate")
+    $latestStagingTag = if ($tagResult.code -eq 0) {
+        [string](@($tagResult.output | Where-Object { $_ -match '(?i)staging' } | Select-Object -First 1) -join "")
+    } else {
+        ""
+    }
 
     $upstreamResult = Invoke-GitRead -GitArgs @("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
     $upstream = ($upstreamResult.output -join "`n").Trim()
@@ -115,6 +134,8 @@ function Get-GitInfo {
         latest_commit = ("{0} {1}" -f $commitHash, $commitMessage).Trim()
         latest_commit_hash = [string]$commitHash
         latest_commit_message = [string]$commitMessage
+        latest_staging_tag = $latestStagingTag
+        changed_files = @($changedFiles)
         upstream = [string]$upstream
         ahead = $ahead
         behind = $behind
@@ -137,9 +158,12 @@ function Get-CurrentTaskInfo {
             path = $taskPath
             exists = $false
             first_60_lines = @()
+            current_runtime = ""
+            latest_accepted_release = ""
             current_objective = ""
             current_issue = ""
             next_exact_step = ""
+            current_release_track = ""
             risks_blockers = @()
         }
     }
@@ -201,6 +225,7 @@ function Get-CurrentTaskInfo {
         current_objective = Read-PreferredSection -SourceLines $lines -Headings @("Current Objective", "Objective")
         current_issue = Read-PreferredSection -SourceLines $lines -Headings @("Current Issue", "Problem")
         next_exact_step = Read-PreferredSection -SourceLines $lines -Headings @("Next Action", "Next Exact Step")
+        current_release_track = Read-PreferredSection -SourceLines $lines -Headings @("Current Release Track", "Release Track")
         risks_blockers = $riskLines
     }
 }
@@ -284,8 +309,8 @@ function New-ProjectStatus {
 
     if ([string]::IsNullOrWhiteSpace($Name)) { $Name = Split-Path -Path $Root -Leaf }
     $exists = Test-Path -LiteralPath $Root
-    $git = if ($exists) { Get-GitInfo -Root $Root } else { [pscustomobject]@{ is_repo = $false; branch = "missing"; status_sb = "Project path not found."; latest_commit = ""; latest_commit_hash = ""; latest_commit_message = ""; upstream = ""; ahead = $null; behind = $null; ahead_behind = "unavailable"; dirty = $false; dirty_state = "MISSING" } }
-    $task = if ($exists) { Get-CurrentTaskInfo -Root $Root -ReadMode $CurrentTaskReadMode } else { [pscustomobject]@{ path = (Join-Path -Path $Root -ChildPath "CURRENT_TASK.md"); exists = $false; first_60_lines = @(); current_runtime = ""; latest_accepted_release = ""; current_objective = ""; current_issue = ""; next_exact_step = ""; risks_blockers = @() } }
+    $git = if ($exists) { Get-GitInfo -Root $Root } else { [pscustomobject]@{ is_repo = $false; branch = "missing"; status_sb = "Project path not found."; latest_commit = ""; latest_commit_hash = ""; latest_commit_message = ""; latest_staging_tag = ""; changed_files = @(); upstream = ""; ahead = $null; behind = $null; ahead_behind = "unavailable"; dirty = $false; dirty_state = "MISSING" } }
+    $task = if ($exists) { Get-CurrentTaskInfo -Root $Root -ReadMode $CurrentTaskReadMode } else { [pscustomobject]@{ path = (Join-Path -Path $Root -ChildPath "CURRENT_TASK.md"); exists = $false; first_60_lines = @(); current_runtime = ""; latest_accepted_release = ""; current_objective = ""; current_issue = ""; next_exact_step = ""; current_release_track = ""; risks_blockers = @() } }
     $apps = if ($exists) { Get-AppsScriptInfo -Root $Root -GitInfo $git } else { [pscustomobject]@{ applicable = $false; clasp_path = ""; clasp_exists = $false; script_id = ""; config = $null; canonical_url_pattern_check = "not checked"; warnings = @() } }
 
     $agentsPresent = if ($exists) { Get-FilePresence -Root $Root -FileName "AGENTS.md" } else { $false }
@@ -314,6 +339,7 @@ function New-ProjectStatus {
             current_objective = $task.current_objective
             current_issue = $task.current_issue
             next_exact_step = $task.next_exact_step
+            current_release_track = $task.current_release_track
             risks_blockers = $task.risks_blockers
             agents_present = $agentsPresent
             known_good_state_present = $knownGoodPresent
@@ -401,16 +427,107 @@ function ConvertTo-ProjectStatusMarkdown {
     return ($lines -join "`n")
 }
 
+function Format-BackupValue {
+    param([string]$Value, [string]$Fallback = "Not detected.")
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $Fallback }
+    return $Value.Trim()
+}
+
+function ConvertTo-StateBackupBlock {
+    param(
+        [Parameter(Mandatory = $true)][object]$Status,
+        [string]$OperatorNote = ""
+    )
+
+    $changedFiles = if ($Status.git.changed_files.Count -gt 0) {
+        ($Status.git.changed_files | ForEach-Object { "- ``{0}``" -f $_ }) -join "`n"
+    } else {
+        "- None."
+    }
+    $configVersion = "Not applicable."
+    if ($Status.apps_script.config -and $Status.apps_script.config.exists) {
+        $version = Format-BackupValue -Value $Status.apps_script.config.version
+        $deploy = Format-BackupValue -Value $Status.apps_script.config.deploy_version_number
+        $configVersion = "VERSION: $version; DEPLOY_VERSION_NUMBER: $deploy"
+    }
+    $blocker = if ($Status.governance.risks_blockers.Count -gt 0) {
+        $Status.governance.risks_blockers[0]
+    } else {
+        Format-BackupValue -Value $Status.governance.current_issue -Fallback "None detected."
+    }
+    $note = Format-BackupValue -Value $OperatorNote -Fallback "[add operator note]"
+
+    return @(
+        "<!-- CODEXHUB_STATE_BACKUP_START -->",
+        "## CodexHub State Backup",
+        "",
+        ("- Last state backup timestamp: {0}" -f $Status.timestamp),
+        ("- Project path: ``{0}``" -f $Status.project_path),
+        ("- Repository state: {0}" -f $Status.git.dirty_state),
+        ("- Current branch: ``{0}``" -f (Format-BackupValue -Value $Status.git.branch)),
+        ("- Latest commit: ``{0}``" -f (Format-BackupValue -Value $Status.git.latest_commit)),
+        ("- Latest matching staging tag: ``{0}``" -f (Format-BackupValue -Value $Status.git.latest_staging_tag -Fallback "Not found.")),
+        ("- Config version / deploy number: {0}" -f $configVersion),
+        ("- Current release track: {0}" -f (Format-BackupValue -Value $Status.governance.current_release_track)),
+        ("- Current blocker: {0}" -f $blocker),
+        ("- Next exact action: {0}" -f (Format-BackupValue -Value $Status.governance.next_exact_step)),
+        ("- Operator note: {0}" -f $note),
+        "",
+        "### Git Status",
+        "```text",
+        $Status.git.status_sb,
+        "```",
+        "",
+        "### Changed Files",
+        $changedFiles,
+        "<!-- CODEXHUB_STATE_BACKUP_END -->"
+    ) -join "`n"
+}
+
+function Save-ProjectStateBackup {
+    param(
+        [Parameter(Mandatory = $true)][object]$Status,
+        [string]$OperatorNote = ""
+    )
+
+    if (-not $Status.governance.current_task.exists) {
+        throw "CURRENT_TASK.md is missing. State backup will not create it without operator approval."
+    }
+
+    $taskPath = $Status.governance.current_task.path
+    $existing = Get-Content -LiteralPath $taskPath -Raw -Encoding utf8
+    $block = ConvertTo-StateBackupBlock -Status $Status -OperatorNote $OperatorNote
+    $pattern = '(?s)<!-- CODEXHUB_STATE_BACKUP_START -->.*?<!-- CODEXHUB_STATE_BACKUP_END -->'
+
+    if ($existing -match $pattern) {
+        $updated = [regex]::Replace($existing, $pattern, $block, 1)
+    } elseif ($existing -match '^(# [^\r\n]+)(\r?\n)') {
+        $updated = $existing -replace '^(# [^\r\n]+)(\r?\n)', ("`$1`$2`$2" + $block + "`$2")
+    } else {
+        $updated = $block + "`n`n" + $existing
+    }
+
+    Set-Content -LiteralPath $taskPath -Value $updated -Encoding utf8 -NoNewline
+    Write-Host ("State backup updated: {0}" -f $taskPath)
+    Write-Host "Only the CODEXHUB_STATE_BACKUP marker block was created or replaced."
+}
+
 function Invoke-ProjectStatusCommand {
     param(
         [string]$ProjectPath,
         [string]$ProjectName,
         [string]$StateRoot,
-        [switch]$AsJson
+        [switch]$AsJson,
+        [switch]$SaveStateBackup,
+        [string]$OperatorNote = ""
     )
 
     if ([string]::IsNullOrWhiteSpace($ProjectPath)) { throw "ProjectPath is required." }
     $status = New-ProjectStatus -Root $ProjectPath -Name $ProjectName
+    if ($SaveStateBackup) {
+        Save-ProjectStateBackup -Status $status -OperatorNote $OperatorNote
+        return
+    }
     if ($AsJson) {
         $status | ConvertTo-Json -Depth 10
         return
@@ -431,5 +548,5 @@ if ($null -ne $importFlag -and [bool]$importFlag.Value) {
 }
 
 if (-not $importOnly) {
-    Invoke-ProjectStatusCommand -ProjectPath $ProjectPath -ProjectName $ProjectName -StateRoot $StateRoot -AsJson:$AsJson
+    Invoke-ProjectStatusCommand -ProjectPath $ProjectPath -ProjectName $ProjectName -StateRoot $StateRoot -AsJson:$AsJson -SaveStateBackup:$SaveStateBackup -OperatorNote $OperatorNote
 }

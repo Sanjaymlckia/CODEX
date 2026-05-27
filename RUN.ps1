@@ -440,6 +440,8 @@ function Show-ProjectMenu {
     Write-Host " 7. Project state authority check" -ForegroundColor White
     Write-Host " 8. Refresh context / quick truth check" -ForegroundColor White
     Write-Host " 9. Advanced checks" -ForegroundColor White
+    Write-Host " S. Save / Backup State" -ForegroundColor White
+    Write-Host "    aliases: update files, backup state, save state, heartbeat, handoff" -ForegroundColor DarkGray
     Write-Host " 0. Back" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -484,6 +486,41 @@ function Invoke-RefreshContext {
     Invoke-LocalCheck -Label "Refresh context" -Arguments $args
 }
 
+function Invoke-StateBackup {
+    param(
+        [object]$Config,
+        [object]$Project,
+        [string]$OperatorNote = "",
+        [switch]$NoteSupplied
+    )
+
+    $projectPath = Get-ProjectPath -AuthorityRoot ([string]$Config.authority_root) -Project $Project
+    $taskPath = Join-Path -Path $projectPath -ChildPath "CURRENT_TASK.md"
+    if (-not (Test-Path -LiteralPath $projectPath)) {
+        Write-Host ("Project folder missing: {0}" -f $projectPath) -ForegroundColor Yellow
+        return
+    }
+    if (-not (Test-Path -LiteralPath $taskPath)) {
+        Write-Host ("CURRENT_TASK.md is missing: {0}" -f $taskPath) -ForegroundColor Yellow
+        Write-Host "State backup stopped; creation requires explicit operator approval." -ForegroundColor Yellow
+        return
+    }
+
+    $note = $OperatorNote
+    if (-not $NoteSupplied) {
+        $note = Read-Selection -Prompt "Optional operator note (blank for placeholder)"
+    }
+    $args = @(
+        "-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\project-status.ps1"),
+        "-ProjectPath", $projectPath,
+        "-ProjectName", ([string]$Project.name),
+        "-SaveStateBackup",
+        "-OperatorNote", $note
+    )
+
+    Invoke-LocalCheck -Label "Save / Backup State" -Arguments $args
+}
+
 function Open-ProjectMenu {
     param(
         [object]$Config,
@@ -498,8 +535,12 @@ function Open-ProjectMenu {
 
     while ($true) {
         Show-ProjectMenu -Config $Config -Project $Project
-        $selection = Read-Selection -Prompt "Select project action"
-        switch ($selection) {
+        $selection = (Read-Selection -Prompt "Select project action").Trim()
+        if ($selection -match '^(?i)(update files|backup state|save state|heartbeat|handoff)\s+["''](.+)["'']$') {
+            Invoke-StateBackup -Config $Config -Project $Project -OperatorNote $Matches[2] -NoteSupplied
+            continue
+        }
+        switch ($selection.ToLowerInvariant()) {
             "0" { return }
             "1" {
                 Open-GuiContext -Config $Config -Project $Project
@@ -549,6 +590,12 @@ function Open-ProjectMenu {
             "7" { Invoke-RefreshContext -Config $Config -Project $Project -AuthorityOnly }
             "8" { Invoke-RefreshContext -Config $Config -Project $Project }
             "9" { Open-AdvancedChecks }
+            "s" { Invoke-StateBackup -Config $Config -Project $Project }
+            "update files" { Invoke-StateBackup -Config $Config -Project $Project }
+            "backup state" { Invoke-StateBackup -Config $Config -Project $Project }
+            "save state" { Invoke-StateBackup -Config $Config -Project $Project }
+            "heartbeat" { Invoke-StateBackup -Config $Config -Project $Project }
+            "handoff" { Invoke-StateBackup -Config $Config -Project $Project }
             default {
                 Write-Host "Invalid selection." -ForegroundColor Yellow
                 Start-Sleep -Seconds 1

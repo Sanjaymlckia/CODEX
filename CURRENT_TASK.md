@@ -1,5 +1,40 @@
 # CURRENT TASK
 
+<!-- CODEXHUB_STATE_BACKUP_START -->
+## CodexHub State Backup
+
+- Last state backup timestamp: 2026-05-27 11:05:01
+- Project path: `E:\Gdrive\01_SANJAY\Codex_Sync\CodexHub`
+- Repository state: DIRTY
+- Current branch: `main`
+- Latest commit: `f513e11 tooling: add machine-safe authority root override`
+- Latest matching staging tag: `Not found.`
+- Config version / deploy number: Not applicable.
+- Current release track: Not detected.
+- Current blocker: None detected.
+- Next exact action: - Validate `RUN.ps1` project menu entries, `tools\refresh-context.ps1`, GUI context guidance, and Advanced Checks exposure for release truth `LO`/`MED`/`HI`.
+- Operator note: bounded replacement verified
+
+### Git Status
+`	ext
+## main...origin/main
+ M CURRENT_TASK.md
+ M README.md
+ M RUN.ps1
+ M tools/project-status.ps1
+?? state/FODE_RUNTIME_last_profile.txt
+?? state/FODE_RUNTIME_last_project_root.txt
+`",
+        ",
+
+- `CURRENT_TASK.md`
+- `README.md`
+- `RUN.ps1`
+- `tools/project-status.ps1`
+- `state/FODE_RUNTIME_last_profile.txt`
+- `state/FODE_RUNTIME_last_project_root.txt`
+<!-- CODEXHUB_STATE_BACKUP_END -->
+
 ## Current Objective
 
 Operate CodexHub as Hub Lite with a thin E-root-only launcher and placeholder workspace readiness.
@@ -43,4 +78,3 @@ Old local root no longer exists:
 `E:\Gdrive\01 SANJAY`
 
 CodexHub path audit found active authority references already updated. Corrective cleanup targeted stale legacy examples, broad deprecated-root detection, and fallback-path wording only. No FODE runtime, Apps Script deployment, Sheets, or Drive content changes authorized.
-
