@@ -442,6 +442,7 @@ function Show-ProjectMenu {
     Write-Host " 9. Advanced checks" -ForegroundColor White
     Write-Host " S. Save / Backup State" -ForegroundColor White
     Write-Host "    aliases: update files, backup state, save state, heartbeat, handoff" -ForegroundColor DarkGray
+    Write-Host " R. Resume state check / recognize saved backup" -ForegroundColor White
     Write-Host " 0. Back" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -484,6 +485,26 @@ function Invoke-RefreshContext {
     }
 
     Invoke-LocalCheck -Label "Refresh context" -Arguments $args
+}
+
+function Invoke-ResumeStateCheck {
+    param(
+        [object]$Config,
+        [object]$Project = $null
+    )
+
+    $arguments = @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\resume_state_check.ps1"))
+    if ($null -ne $Project) {
+        $projectPath = Get-ProjectPath -AuthorityRoot ([string]$Config.authority_root) -Project $Project
+        if (-not (Test-Path -LiteralPath (Join-Path -Path $projectPath -ChildPath ".git"))) {
+            Write-Host ("Resume state check unavailable; selected project is not a git repository: {0}" -f $projectPath) -ForegroundColor Yellow
+            return
+        }
+        $arguments += @("-ProjectPath", $projectPath)
+        Write-Host ("Resume state target: {0} ({1})" -f [string]$Project.name, $projectPath) -ForegroundColor DarkCyan
+    }
+
+    Invoke-LocalCheck -Label "Resume state check" -Arguments $arguments
 }
 
 function Invoke-StateBackup {
@@ -591,6 +612,7 @@ function Open-ProjectMenu {
             "8" { Invoke-RefreshContext -Config $Config -Project $Project }
             "9" { Open-AdvancedChecks }
             "s" { Invoke-StateBackup -Config $Config -Project $Project }
+            "r" { Invoke-ResumeStateCheck -Config $Config -Project $Project }
             "update files" { Invoke-StateBackup -Config $Config -Project $Project }
             "backup state" { Invoke-StateBackup -Config $Config -Project $Project }
             "save state" { Invoke-StateBackup -Config $Config -Project $Project }
@@ -675,7 +697,7 @@ while ($true) {
 
     switch ($selection.ToUpperInvariant()) {
         "R" {
-            Invoke-LocalCheck -Label "Resume state check" -Arguments @("-File", (Join-Path -Path (Get-HubRoot) -ChildPath "tools\resume_state_check.ps1"))
+            Invoke-ResumeStateCheck -Config $config
             continue
         }
         "A" {

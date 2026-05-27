@@ -64,3 +64,5 @@ For git-backed projects, use `tools\refresh-context.ps1 -ProjectName <KEY>` or t
 
 `S. Save / Backup State` is intentionally manual. It reads project/git/version status and creates or replaces only the `<!-- CODEXHUB_STATE_BACKUP_START -->` / `<!-- CODEXHUB_STATE_BACKUP_END -->` block in that project's existing `CURRENT_TASK.md`. It does not create a missing `CURRENT_TASK.md`, edit app or Config files, run `clasp`, create Apps Script versions, deploy, commit, tag, or push. An optional short operator note is written into the block, either when prompted or inline, for example `backup state "paused before browser acceptance"`.
 
+After `S` is run in a selected-project menu, `R. Resume state check / recognize saved backup` in that same menu checks the same project path, recognizes the bounded backup block as recorded local context, and reports its timestamp and operator note when present.
+

@@ -69,6 +69,9 @@ function Get-CurrentTaskInfo {
             hash_sha256 = ""
             workspace_path = ""
             has_next_action = $false
+            has_state_backup = $false
+            state_backup_timestamp = ""
+            state_backup_note = ""
             appears_current = $false
         }
     }
@@ -81,6 +84,21 @@ function Get-CurrentTaskInfo {
     }
 
     $hasNextAction = ($raw -match '(?m)^##\s+Next Action\s*$')
+    $hasStateBackup = ($raw -match '(?s)<!--\s*CODEXHUB_STATE_BACKUP_START\s*-->.*?<!--\s*CODEXHUB_STATE_BACKUP_END\s*-->')
+    $stateBackupTimestamp = ""
+    $stateBackupNote = ""
+    if ($hasStateBackup) {
+        $backupMatch = [regex]::Match($raw, '(?s)<!--\s*CODEXHUB_STATE_BACKUP_START\s*-->(.*?)<!--\s*CODEXHUB_STATE_BACKUP_END\s*-->')
+        if ($backupMatch.Success) {
+            $backupText = $backupMatch.Groups[1].Value
+            if ($backupText -match '(?m)^\s*-\s*Last state backup timestamp:\s*(.+?)\s*$') {
+                $stateBackupTimestamp = $Matches[1].Trim()
+            }
+            if ($backupText -match '(?m)^\s*-\s*Operator note:\s*(.+?)\s*$') {
+                $stateBackupNote = $Matches[1].Trim()
+            }
+        }
+    }
     $info = Get-Item -LiteralPath $taskPath
     return [pscustomobject]@{
         path = $taskPath
@@ -89,6 +107,9 @@ function Get-CurrentTaskInfo {
         hash_sha256 = Get-FileHashSafe -Path $taskPath
         workspace_path = $workspacePath
         has_next_action = $hasNextAction
+        has_state_backup = $hasStateBackup
+        state_backup_timestamp = $stateBackupTimestamp
+        state_backup_note = $stateBackupNote
         appears_current = $hasNextAction
     }
 }
@@ -303,6 +324,7 @@ function Get-ClassificationResult {
     if ($GitInfo.dirty) {
         $taskRecorded = $CurrentTaskInfo.appears_current -and (
             ($GitInfo.status_sb -match '(?m)^\s*[ MARCUD?!]{1,2}\s+CURRENT_TASK\.md\s*$') -or
+            $CurrentTaskInfo.has_state_backup -or
             $ReleaseTruthReference.exists -or
             $ResumeStateReference.exists
         )
@@ -396,6 +418,9 @@ Write-Host ("Resume: {0} | Git: {1} | Task: {2} | Mode: LO" -f $result.classific
 Write-Host ("Repo: {0}" -f $pathConsistency.repo_root)
 Write-Host ("Branch: {0} | HEAD: {1}" -f $(if ($gitInfo.branch) { $gitInfo.branch } else { "unknown" }), $(if ($gitInfo.head) { $gitInfo.head } else { "unknown" }))
 Write-Host ("Confidence: {0} | Action: {1}" -f $result.confidence, $result.recommended_action)
+if ($currentTaskInfo.has_state_backup) {
+    Write-Host ("State backup: RECOGNIZED | Timestamp: {0} | Note: {1}" -f $(if ($currentTaskInfo.state_backup_timestamp) { $currentTaskInfo.state_backup_timestamp } else { "not recorded" }), $(if ($currentTaskInfo.state_backup_note) { $currentTaskInfo.state_backup_note } else { "not recorded" }))
+}
 if ($warnings.Count -gt 0) {
     Write-Host ("Warnings: {0}" -f ($warningsArray -join " | "))
 }
