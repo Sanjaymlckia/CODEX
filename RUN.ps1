@@ -372,6 +372,8 @@ function Show-Header {
     Write-Host "             CODEXHUB LITE" -ForegroundColor Cyan
     Write-Host "=============================================" -ForegroundColor DarkCyan
     Write-Host (" MODE: {0}" -f $OperationalMode.ToUpperInvariant()) -ForegroundColor Cyan
+    Write-Host (" Runtime PowerShell: {0}" -f $PSVersionTable.PSVersion.ToString()) -ForegroundColor Cyan
+    Write-Host (" Runtime PSHOME: {0}" -f $PSHOME) -ForegroundColor Cyan
     Write-Host (" AUTH ROOT: {0}" -f [string]$Config.authority_root) -ForegroundColor Cyan
     Write-Host (" Active: {0}   Placeholder: {1}" -f $activeCount, $placeholderCount) -ForegroundColor Gray
 
