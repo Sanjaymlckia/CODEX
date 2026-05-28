@@ -9,6 +9,27 @@ param(
     [string]$OperatorNote = ""
 )
 
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($null -eq $pwsh) {
+        Write-Error "PowerShell 7 is required. Install or launch pwsh before running CodexHub."
+        exit 1
+    }
+
+    Write-Host "Windows PowerShell 5.1 detected. Re-launching CodexHub under PowerShell 7."
+    $forwardArgs = @()
+    if ($PSBoundParameters.ContainsKey("ProjectPath")) { $forwardArgs += @("-ProjectPath", $ProjectPath) }
+    if ($PSBoundParameters.ContainsKey("ProjectName")) { $forwardArgs += @("-ProjectName", $ProjectName) }
+    if ($PSBoundParameters.ContainsKey("StateRoot")) { $forwardArgs += @("-StateRoot", $StateRoot) }
+    if ($PSBoundParameters.ContainsKey("CurrentTaskReadMode")) { $forwardArgs += @("-CurrentTaskReadMode", $CurrentTaskReadMode) }
+    if ($AsJson) { $forwardArgs += "-AsJson" }
+    if ($SaveStateBackup) { $forwardArgs += "-SaveStateBackup" }
+    if ($PSBoundParameters.ContainsKey("OperatorNote")) { $forwardArgs += @("-OperatorNote", $OperatorNote) }
+    $forwardArgs += $args
+    & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @forwardArgs
+    exit $LASTEXITCODE
+}
+
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -523,6 +544,31 @@ function Invoke-ProjectStatusCommand {
     )
 
     if ([string]::IsNullOrWhiteSpace($ProjectPath)) { throw "ProjectPath is required." }
+    $authorityTool = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath "tools\local_authority_check.ps1"
+    if (Test-Path -LiteralPath $authorityTool) {
+        $callerProjectPath = $ProjectPath
+        $callerProjectName = $ProjectName
+        $callerStateRoot = $StateRoot
+        $callerReadMode = $CurrentTaskReadMode
+        $callerAsJson = $AsJson
+        $callerSaveStateBackup = $SaveStateBackup
+        $callerOperatorNote = $OperatorNote
+        . $authorityTool
+        $ProjectPath = $callerProjectPath
+        $ProjectName = $callerProjectName
+        $StateRoot = $callerStateRoot
+        $CurrentTaskReadMode = $callerReadMode
+        $AsJson = $callerAsJson
+        $SaveStateBackup = $callerSaveStateBackup
+        $OperatorNote = $callerOperatorNote
+        $authority = Test-LocalAuthority -ProjectRoot $ProjectPath -Mode "LO"
+        if ($authority.status -notin @("LOCAL_AUTHORITY_OK", "LOCAL_AUTHORITY_DIRTY_RECORDED")) {
+            Write-Host $authority.status
+            Write-Host $authority.message
+            Write-Host ("Remote proof: {0} - {1}" -f $authority.remote_proof.status, $authority.remote_proof.reason)
+            throw "Project status stopped because local authority is not established."
+        }
+    }
     $status = New-ProjectStatus -Root $ProjectPath -Name $ProjectName
     if ($SaveStateBackup) {
         Save-ProjectStateBackup -Status $status -OperatorNote $OperatorNote

@@ -4,6 +4,22 @@ param(
     [switch]$SelfTest
 )
 
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($null -eq $pwsh) {
+        Write-Error "PowerShell 7 is required. Install or launch pwsh before running CodexHub."
+        exit 1
+    }
+
+    Write-Host "Windows PowerShell 5.1 detected. Re-launching CodexHub under PowerShell 7."
+    $forwardArgs = @()
+    if ($PSBoundParameters.ContainsKey("OperationalMode")) { $forwardArgs += @("-OperationalMode", $OperationalMode) }
+    if ($SelfTest) { $forwardArgs += "-SelfTest" }
+    $forwardArgs += $args
+    & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @forwardArgs
+    exit $LASTEXITCODE
+}
+
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -17,6 +33,10 @@ function Get-HubRoot {
 
 function Get-RegistryPath {
     return Join-Path -Path (Get-HubRoot) -ChildPath "projects\projects.json"
+}
+
+function Get-LocalAuthorityToolPath {
+    return Join-Path -Path (Get-HubRoot) -ChildPath "tools\local_authority_check.ps1"
 }
 
 function Get-StateRoot {
@@ -113,6 +133,32 @@ function Get-ProjectLabel {
     }
 
     return [string]$Project.name
+}
+
+function Test-ProjectLocalAuthority {
+    param(
+        [object]$Project,
+        [string]$ProjectPath,
+        [string]$Mode = "LO"
+    )
+
+    $toolPath = Get-LocalAuthorityToolPath
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        throw "Local authority gate is missing: $toolPath"
+    }
+
+    . $toolPath
+    $result = Test-LocalAuthority -ProjectRoot $ProjectPath -ExpectedRemote ([string]$Project.remote) -Mode $Mode
+    Write-Host ("Local authority: {0}" -f $result.status) -ForegroundColor Cyan
+    Write-Host $result.message -ForegroundColor DarkGray
+    Write-Host ("Remote proof: {0}; temp repo: {1}; outside memory: {2}" -f $result.remote_proof.status, $result.temp_repo_status, $result.outside_memory_status) -ForegroundColor DarkGray
+
+    if ($result.status -in @("LOCAL_AUTHORITY_OK", "LOCAL_AUTHORITY_DIRTY_RECORDED")) {
+        return $true
+    }
+
+    Write-Host "Project launch stopped by local authority gate." -ForegroundColor Yellow
+    return $false
 }
 
 function Get-CurrentTaskPreviewLines {
@@ -302,7 +348,8 @@ function Start-CodexHandoff {
         $codexCommand = $ResumeCommand
     }
 
-    Start-Process powershell.exe -ArgumentList @(
+    $pwsh = Get-Command pwsh -ErrorAction Stop
+    Start-Process $pwsh.Source -ArgumentList @(
         "-NoExit",
         "-ExecutionPolicy", "Bypass",
         "-Command",
@@ -316,7 +363,11 @@ function Show-Header {
     $activeCount = @($Config.projects | Where-Object { [string]$_.status -eq "active" }).Count
     $placeholderCount = @($Config.projects | Where-Object { [string]$_.status -eq "placeholder" }).Count
 
-    Clear-Host
+    try {
+        Clear-Host
+    } catch {
+        Write-Host ""
+    }
     Write-Host "=============================================" -ForegroundColor DarkCyan
     Write-Host "             CODEXHUB LITE" -ForegroundColor Cyan
     Write-Host "=============================================" -ForegroundColor DarkCyan
@@ -401,6 +452,9 @@ function Open-Project {
     $hasRemote = -not [string]::IsNullOrWhiteSpace([string]$Project.remote)
 
     if (Test-Path -LiteralPath $projectPath) {
+        if (-not (Test-ProjectLocalAuthority -Project $Project -ProjectPath $projectPath -Mode "LO")) {
+            return $false
+        }
         Set-LastProjectName -Name ([string]$Project.name)
         Write-Host ("Launching Codex in: {0}" -f $projectPath) -ForegroundColor Cyan
         Start-CodexHandoff -ProjectPath $projectPath
@@ -551,6 +605,11 @@ function Open-ProjectMenu {
     $projectPath = Get-ProjectPath -AuthorityRoot ([string]$Config.authority_root) -Project $Project
     if (-not (Test-Path -LiteralPath $projectPath)) {
         [void](Open-Project -Config $Config -Project $Project)
+        return
+    }
+
+    if (-not (Test-ProjectLocalAuthority -Project $Project -ProjectPath $projectPath -Mode "LO")) {
+        [void](Read-Selection -Prompt "Press Enter to return to menu")
         return
     }
 

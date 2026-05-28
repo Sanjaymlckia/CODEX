@@ -5,6 +5,23 @@ param(
     [switch]$AsJson
 )
 
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($null -eq $pwsh) {
+        Write-Error "PowerShell 7 is required. Install or launch pwsh before running CodexHub."
+        exit 1
+    }
+
+    Write-Host "Windows PowerShell 5.1 detected. Re-launching CodexHub under PowerShell 7."
+    $forwardArgs = @()
+    if ($PSBoundParameters.ContainsKey("ProjectPath")) { $forwardArgs += @("-ProjectPath", $ProjectPath) }
+    if ($PSBoundParameters.ContainsKey("Mode")) { $forwardArgs += @("-Mode", $Mode) }
+    if ($AsJson) { $forwardArgs += "-AsJson" }
+    $forwardArgs += $args
+    & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @forwardArgs
+    exit $LASTEXITCODE
+}
+
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -442,6 +459,24 @@ function Get-Classification {
 $repoRoot = (Resolve-Path -LiteralPath $ProjectPath).Path
 if (-not (Test-Path -LiteralPath (Join-Path -Path $repoRoot -ChildPath ".git"))) {
     throw "Run this script from a git repo root or pass -ProjectPath to a git repo root."
+}
+
+$authorityTool = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath "tools\local_authority_check.ps1"
+if (Test-Path -LiteralPath $authorityTool) {
+    $callerProjectPath = $ProjectPath
+    $callerMode = $Mode
+    $callerAsJson = $AsJson
+    . $authorityTool
+    $ProjectPath = $callerProjectPath
+    $Mode = $callerMode
+    $AsJson = $callerAsJson
+    $authority = Test-LocalAuthority -ProjectRoot $repoRoot -Mode $Mode
+    if ($authority.status -notin @("LOCAL_AUTHORITY_OK", "LOCAL_AUTHORITY_DIRTY_RECORDED")) {
+        Write-Host $authority.status
+        Write-Host $authority.message
+        Write-Host ("Remote proof: {0} - {1}" -f $authority.remote_proof.status, $authority.remote_proof.reason)
+        throw "Release truth stopped before remote checks because local authority is not established."
+    }
 }
 
 $warnings = New-StringList

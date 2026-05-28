@@ -2,6 +2,14 @@
   "authority_root": "E:\\Gdrive\\01_SANJAY\\Codex_Sync",
   "projects": [
     {
+      "name": "CODEXHUB_TOOLING",
+      "display_name": "CodexHub Tooling",
+      "folder": "CodexHub",
+      "remote": "https://github.com/Sanjaymlckia/CODEX.git",
+      "status": "active",
+      "notes": "Local CodexHub launcher, governance, tooling, and release-discipline maintenance."
+    },
+    {
       "name": "FODE_RUNTIME",
       "display_name": "FODE Runtime",
       "folder": "FODE_Runtime_1wog",

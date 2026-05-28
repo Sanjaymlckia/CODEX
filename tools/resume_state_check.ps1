@@ -3,6 +3,22 @@ param(
     [switch]$AsJson
 )
 
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($null -eq $pwsh) {
+        Write-Error "PowerShell 7 is required. Install or launch pwsh before running CodexHub."
+        exit 1
+    }
+
+    Write-Host "Windows PowerShell 5.1 detected. Re-launching CodexHub under PowerShell 7."
+    $forwardArgs = @()
+    if ($PSBoundParameters.ContainsKey("ProjectPath")) { $forwardArgs += @("-ProjectPath", $ProjectPath) }
+    if ($AsJson) { $forwardArgs += "-AsJson" }
+    $forwardArgs += $args
+    & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @forwardArgs
+    exit $LASTEXITCODE
+}
+
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -72,6 +88,8 @@ function Get-CurrentTaskInfo {
             has_state_backup = $false
             state_backup_timestamp = ""
             state_backup_note = ""
+            state_backup_timestamp_valid = $false
+            state_backup_is_fresh = $false
             appears_current = $false
         }
     }
@@ -87,6 +105,8 @@ function Get-CurrentTaskInfo {
     $hasStateBackup = ($raw -match '(?s)<!--\s*CODEXHUB_STATE_BACKUP_START\s*-->.*?<!--\s*CODEXHUB_STATE_BACKUP_END\s*-->')
     $stateBackupTimestamp = ""
     $stateBackupNote = ""
+    $stateBackupTimestampValid = $false
+    $stateBackupIsFresh = $false
     if ($hasStateBackup) {
         $backupMatch = [regex]::Match($raw, '(?s)<!--\s*CODEXHUB_STATE_BACKUP_START\s*-->(.*?)<!--\s*CODEXHUB_STATE_BACKUP_END\s*-->')
         if ($backupMatch.Success) {
@@ -96,6 +116,12 @@ function Get-CurrentTaskInfo {
             }
             if ($backupText -match '(?m)^\s*-\s*Operator note:\s*(.+?)\s*$') {
                 $stateBackupNote = $Matches[1].Trim()
+            }
+            $parsedTimestamp = [datetime]::MinValue
+            if ([datetime]::TryParse($stateBackupTimestamp, [ref]$parsedTimestamp)) {
+                $stateBackupTimestampValid = $true
+                $age = (Get-Date) - $parsedTimestamp
+                $stateBackupIsFresh = ($age.TotalMinutes -ge -5 -and $age.TotalHours -le 24)
             }
         }
     }
@@ -110,6 +136,8 @@ function Get-CurrentTaskInfo {
         has_state_backup = $hasStateBackup
         state_backup_timestamp = $stateBackupTimestamp
         state_backup_note = $stateBackupNote
+        state_backup_timestamp_valid = $stateBackupTimestampValid
+        state_backup_is_fresh = $stateBackupIsFresh
         appears_current = $hasNextAction
     }
 }
@@ -322,12 +350,16 @@ function Get-ClassificationResult {
     }
 
     if ($GitInfo.dirty) {
-        $taskRecorded = $CurrentTaskInfo.appears_current -and (
+        $freshStateBackup = (
+            $CurrentTaskInfo.has_state_backup -and
+            $CurrentTaskInfo.state_backup_timestamp_valid -and
+            $CurrentTaskInfo.state_backup_is_fresh
+        )
+        $taskRecorded = $freshStateBackup -or ($CurrentTaskInfo.appears_current -and (
             ($GitInfo.status_sb -match '(?m)^\s*[ MARCUD?!]{1,2}\s+CURRENT_TASK\.md\s*$') -or
-            $CurrentTaskInfo.has_state_backup -or
             $ReleaseTruthReference.exists -or
             $ResumeStateReference.exists
-        )
+        ))
 
         if ($taskRecorded) {
             return [pscustomobject]@{
@@ -357,6 +389,22 @@ function Get-ClassificationResult {
 $repoRoot = (Resolve-Path -LiteralPath $ProjectPath).Path
 if (-not (Test-Path -LiteralPath (Join-Path -Path $repoRoot -ChildPath ".git"))) {
     throw "Run this script from a git repo root or pass -ProjectPath to a git repo root."
+}
+
+$authorityTool = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath "tools\local_authority_check.ps1"
+if (Test-Path -LiteralPath $authorityTool) {
+    $callerProjectPath = $ProjectPath
+    $callerAsJson = $AsJson
+    . $authorityTool
+    $ProjectPath = $callerProjectPath
+    $AsJson = $callerAsJson
+    $authority = Test-LocalAuthority -ProjectRoot $repoRoot -Mode "LO"
+    if ($authority.status -notin @("LOCAL_AUTHORITY_OK", "LOCAL_AUTHORITY_DIRTY_RECORDED")) {
+        Write-Host $authority.status
+        Write-Host $authority.message
+        Write-Host ("Remote proof: {0} - {1}" -f $authority.remote_proof.status, $authority.remote_proof.reason)
+        throw "Resume state check stopped because local authority is not established."
+    }
 }
 
 $warnings = New-StringList
@@ -419,7 +467,8 @@ Write-Host ("Repo: {0}" -f $pathConsistency.repo_root)
 Write-Host ("Branch: {0} | HEAD: {1}" -f $(if ($gitInfo.branch) { $gitInfo.branch } else { "unknown" }), $(if ($gitInfo.head) { $gitInfo.head } else { "unknown" }))
 Write-Host ("Confidence: {0} | Action: {1}" -f $result.confidence, $result.recommended_action)
 if ($currentTaskInfo.has_state_backup) {
-    Write-Host ("State backup: RECOGNIZED | Timestamp: {0} | Note: {1}" -f $(if ($currentTaskInfo.state_backup_timestamp) { $currentTaskInfo.state_backup_timestamp } else { "not recorded" }), $(if ($currentTaskInfo.state_backup_note) { $currentTaskInfo.state_backup_note } else { "not recorded" }))
+    $backupFreshness = if ($currentTaskInfo.state_backup_is_fresh) { "fresh" } elseif ($currentTaskInfo.state_backup_timestamp_valid) { "stale" } else { "invalid timestamp" }
+    Write-Host ("State backup: RECOGNIZED ({0}) | Timestamp: {1} | Note: {2}" -f $backupFreshness, $(if ($currentTaskInfo.state_backup_timestamp) { $currentTaskInfo.state_backup_timestamp } else { "not recorded" }), $(if ($currentTaskInfo.state_backup_note) { $currentTaskInfo.state_backup_note } else { "not recorded" }))
 }
 if ($warnings.Count -gt 0) {
     Write-Host ("Warnings: {0}" -f ($warningsArray -join " | "))

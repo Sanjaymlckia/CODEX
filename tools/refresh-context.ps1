@@ -3,6 +3,22 @@ param(
     [switch]$AuthorityOnly
 )
 
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($null -eq $pwsh) {
+        Write-Error "PowerShell 7 is required. Install or launch pwsh before running CodexHub."
+        exit 1
+    }
+
+    Write-Host "Windows PowerShell 5.1 detected. Re-launching CodexHub under PowerShell 7."
+    $forwardArgs = @()
+    if ($PSBoundParameters.ContainsKey("ProjectName")) { $forwardArgs += @("-ProjectName", $ProjectName) }
+    if ($AuthorityOnly) { $forwardArgs += "-AuthorityOnly" }
+    $forwardArgs += $args
+    & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @forwardArgs
+    exit $LASTEXITCODE
+}
+
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -84,6 +100,21 @@ if ($project.Count -eq 0) {
 $project = $project[0]
 
 $registeredRoot = Join-Path -Path ([string]$config.authority_root) -ChildPath ([string]$project.folder)
+$authorityTool = Join-Path -Path $hubRoot -ChildPath "tools\local_authority_check.ps1"
+if (Test-Path -LiteralPath $authorityTool) {
+    $callerProjectName = $ProjectName
+    $callerAuthorityOnly = $AuthorityOnly
+    . $authorityTool
+    $ProjectName = $callerProjectName
+    $AuthorityOnly = $callerAuthorityOnly
+    $authority = Test-LocalAuthority -ProjectRoot $registeredRoot -ExpectedRemote ([string]$project.remote) -Mode "LO"
+    if ($authority.status -notin @("LOCAL_AUTHORITY_OK", "LOCAL_AUTHORITY_DIRTY_RECORDED")) {
+        Write-Host $authority.status
+        Write-Host $authority.message
+        Write-Host ("Remote proof: {0} - {1}" -f $authority.remote_proof.status, $authority.remote_proof.reason)
+        throw "Refresh context stopped because local authority is not established."
+    }
+}
 $taskPath = Join-Path -Path $registeredRoot -ChildPath "CURRENT_TASK.md"
 $agentsPath = Join-Path -Path $registeredRoot -ChildPath "AGENTS.md"
 $configPath = Join-Path -Path $registeredRoot -ChildPath "Config.js"
