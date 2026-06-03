@@ -1,0 +1,24 @@
+{
+  "name": "codexhub",
+  "version": "1.0.0",
+  "description": "Thin launcher for Codex workspaces under the single authority root:\r `E:\\Gdrive\\01_SANJAY\\Codex_Sync`",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sanjaymlckia/CODEX.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Sanjaymlckia/CODEX/issues"
+  },
+  "homepage": "https://github.com/Sanjaymlckia/CODEX#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

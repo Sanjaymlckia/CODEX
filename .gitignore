@@ -17,9 +17,19 @@ state/local/*
 !state/local/machine.local.example.json
 .codexhub/release_truth/latest.json
 .codexhub/resume_state/latest.json
+.codexhub/SESSION_CONTEXT.md
 
 # Local machine-specific CodexHub override
 state/local/machine.local.json
+state/*_last_profile.txt
+state/*_last_project_root.txt
+state/pre_codex_reinstall_resume_state_check.diff
 
 # Google Drive / sync conflict duplicates
 * (1).*
+reports/
+playwright-report/
+test-results/
+node_modules/
+.env.local
+.pw-fode-profile/

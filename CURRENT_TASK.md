@@ -1,5 +1,34 @@
 # CURRENT TASK
 
+<!-- CODEXHUB_STATE_BACKUP_START -->
+## CodexHub State Backup
+
+- Last state backup timestamp: 2026-05-28 19:27:01
+- Project path: `E:\Gdrive\01_SANJAY\Codex_Sync\CodexHub`
+- Repository state: DIRTY
+- Current branch: `main`
+- Latest commit: `639cb2c tooling: show runtime shell proof in launcher`
+- Latest matching staging tag: `Not found.`
+- Config version / deploy number: Not applicable.
+- Current release track: Not detected.
+- Current blocker: None detected.
+- Next exact action: Run final verification: `git status -sb`, `git diff --check`, then commit and push if all checks pass.
+- Operator note: [add operator note]
+
+### Git Status
+```text
+## main...origin/main
+?? state/FODE_RUNTIME_last_profile.txt
+?? state/FODE_RUNTIME_last_project_root.txt
+?? state/pre_codex_reinstall_resume_state_check.diff
+```
+
+### Changed Files
+- `state/FODE_RUNTIME_last_profile.txt`
+- `state/FODE_RUNTIME_last_project_root.txt`
+- `state/pre_codex_reinstall_resume_state_check.diff`
+<!-- CODEXHUB_STATE_BACKUP_END -->
+
 ## Current Objective
 
 Track L CodexHub tooling maintenance only: enforce PowerShell 7, register CodexHub as a first-class project, add local authority before remote proof, classify sandbox startup failures separately, block temp repo/remote proof/outside-memory fallback in LIGHT/LO/MED, and record tooling readiness.
