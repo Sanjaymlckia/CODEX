@@ -9,12 +9,19 @@ export default defineConfig({
   retries: 0,
   reporter: [["list"]],
   use: {
-    browserName: "chromium",
     headless: false,
     actionTimeout: 15_000,
     navigationTimeout: 60_000,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "off"
-  }
+  },
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        browserName: "chromium"
+      }
+    }
+  ]
 });

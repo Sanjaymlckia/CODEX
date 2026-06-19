@@ -47,10 +47,11 @@ test("Legacy Admin selected-applicant document gallery is reachable and read-onl
   const targetText = await readTargetText(target);
   const scope = await findInteractiveScope(page);
 
-  expect(targetText).toMatch(/r271|Deploy:\s*271|Runtime:\s*r271/i);
+  if (hasExpectedRuntime(env)) expect(targetText).toContain(String(env.expectedRuntime));
+  if (hasExpectedDeploy(env)) expect(targetText).toContain(String(env.expectedDeploy));
   expectNoWrongSurface(targetText);
 
-  await screenshot(page, dir, "01-admin-page-r271");
+  await screenshot(page, dir, "01-admin-page-runtime");
 
   const fixtureApplicantId = String(process.env.FODE_DOC_REVIEW_APPLICANT_ID || "FODE-26-002959").trim();
   const searchSummary = scope.locator("#legacySearchPanel summary");
