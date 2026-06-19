@@ -8,12 +8,15 @@
     "test:smoke": "playwright test specs/fode-smoke.spec.ts",
     "test:ops-labels": "playwright test specs/fode-ops-communications-labels.spec.ts",
     "test:legacy-admin": "playwright test specs/fode-legacy-admin-health.spec.ts",
+    "test:admin-doc-preview": "playwright test specs/fode-admin-document-preview.spec.ts",
+    "test:admin-doc-buttons": "playwright test specs/fode-admin-document-buttons.spec.ts",
     "test:ops-surface": "playwright test specs/fode-ops-surface-health.spec.ts",
     "test:ops-usability": "playwright test specs/fode-ops-usability.spec.ts",
     "test:click-safety": "playwright test specs/fode-click-safety.spec.ts",
     "test:ops-queue-health": "playwright test specs/fode-ops-queue-health.spec.ts",
     "test:ops-startup": "playwright test specs/fode-ops-startup.spec.ts",
-    "test:all-surfaces": "npm run test:smoke && npm run test:legacy-admin && npm run test:ops-surface && npm run test:ops-labels && npm run test:ops-queue-health && npm run test:click-safety && npm run test:ops-startup"
+    "test:all-surfaces": "npm run test:smoke && npm run test:legacy-admin && npm run test:ops-surface && npm run test:ops-labels && npm run test:ops-queue-health && npm run test:click-safety && npm run test:ops-startup",
+    "test:ui": "playwright test --ui"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0"

@@ -27,8 +27,13 @@ export function expectNoStartupErrors(pageErrors: string[]): void {
   expect(pageErrors, "Browser startup should not throw page errors.").toEqual([]);
 }
 
-export function runtimeVersionLabel(expectedVersion: string, expectedVersionNumber: string): string {
-  return `${expectedVersion} / ${expectedVersionNumber}`;
+export function runtimeVersionLabel(expectedVersion?: string, expectedVersionNumber?: string): string {
+  const runtime = String(expectedVersion || "").trim();
+  const deploy = String(expectedVersionNumber || "").trim();
+  if (runtime && deploy) return `${runtime} / ${deploy}`;
+  if (runtime) return runtime;
+  if (deploy) return `deploy ${deploy}`;
+  return "observed runtime not asserted";
 }
 
 export function writeRunSummary(dir: string, summary: Omit<RunSummary, "timestamp"> & { timestamp?: string }): void {

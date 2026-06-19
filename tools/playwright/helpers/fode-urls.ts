@@ -7,8 +7,11 @@ export type FodeEnv = {
   adminOpsUrl?: string;
   adminWhoamiUrl?: string;
   studentWhoamiUrl?: string;
-  expectedVersion: string;
-  expectedVersionNumber: string;
+  testedUrl: string;
+  targetKind: "pinned-exec" | "head-dev" | "unknown";
+  expectedRuntime?: string;
+  expectedDeploy?: string;
+  acceptHead: boolean;
 };
 
 export function loadDotEnv(): void {
@@ -28,13 +31,20 @@ export function loadDotEnv(): void {
 
 export function fodeEnv(): FodeEnv {
   loadDotEnv();
-  const adminUrl = cleanUrl(process.env.FODE_ADMIN_BASE_URL || process.env.FODE_ADMIN_URL || "");
-  const studentUrl = cleanUrl(process.env.FODE_STUDENT_BASE_URL || process.env.FODE_STUDENT_URL || "");
+  const adminUrl = cleanUrl(process.env.FODE_ADMIN_URL || process.env.FODE_ADMIN_BASE_URL || "");
+  const studentUrl = cleanUrl(process.env.FODE_STUDENT_URL || process.env.FODE_STUDENT_BASE_URL || "");
   const configuredAdminOpsUrl = cleanUrl(process.env.FODE_ADMIN_OPS_URL || "");
   const configuredAdminWhoamiUrl = cleanUrl(process.env.FODE_ADMIN_WHOAMI_URL || "");
   const configuredStudentWhoamiUrl = cleanUrl(process.env.FODE_STUDENT_WHOAMI_URL || "");
-  const expectedVersion = String(process.env.EXPECTED_VERSION || "r213").trim();
-  const expectedVersionNumber = String(process.env.EXPECTED_VERSION_NUMBER || "213").trim();
+  const expectedRuntime = cleanOptional(
+    process.env.FODE_EXPECTED_RUNTIME || process.env.EXPECTED_VERSION || ""
+  );
+  const expectedDeploy = cleanOptional(
+    process.env.FODE_EXPECTED_DEPLOY || process.env.EXPECTED_VERSION_NUMBER || ""
+  );
+  const acceptHead = parseBoolean(
+    process.env.FODE_ACCEPT_HEAD || process.env.ACCEPT_HEAD || ""
+  );
   if (!adminUrl) throw new Error("FODE_ADMIN_URL is required.");
   if (!studentUrl) throw new Error("FODE_STUDENT_URL is required.");
   return {
@@ -43,13 +53,47 @@ export function fodeEnv(): FodeEnv {
     adminOpsUrl: configuredAdminOpsUrl || undefined,
     adminWhoamiUrl: configuredAdminWhoamiUrl || undefined,
     studentWhoamiUrl: configuredStudentWhoamiUrl || undefined,
-    expectedVersion,
-    expectedVersionNumber
+    testedUrl: adminUrl,
+    targetKind: classifyAdminTarget(adminUrl),
+    expectedRuntime: expectedRuntime || undefined,
+    expectedDeploy: expectedDeploy || undefined,
+    acceptHead
   };
 }
 
 export function cleanUrl(url: string): string {
   return String(url || "").trim().replace(/[?#].*$/, "");
+}
+
+export function cleanOptional(value: string): string {
+  const raw = String(value || "").trim();
+  return raw;
+}
+
+export function parseBoolean(value: string): boolean {
+  const raw = String(value || "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
+export function classifyAdminTarget(url: string): "pinned-exec" | "head-dev" | "unknown" {
+  const clean = cleanUrl(url);
+  if (/\/exec$/i.test(clean)) return "pinned-exec";
+  if (/\/dev$/i.test(clean)) return "head-dev";
+  return "unknown";
+}
+
+export function hasExpectedRuntime(env: FodeEnv): boolean {
+  return !!String(env.expectedRuntime || "").trim();
+}
+
+export function hasExpectedDeploy(env: FodeEnv): boolean {
+  return !!String(env.expectedDeploy || "").trim();
+}
+
+export function assertHeadAllowed(env: FodeEnv): void {
+  if (env.targetKind === "head-dev" && env.acceptHead !== true) {
+    throw new Error("Target URL resolves to HEAD/dev. Set FODE_ACCEPT_HEAD=true to allow this run.");
+  }
 }
 
 export function withView(baseUrl: string, view: string): string {

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { test, expect } from "@playwright/test";
-import { adminLegacyUrl, fodeEnv } from "../helpers/fode-urls";
+import { adminLegacyUrl, assertHeadAllowed, fodeEnv } from "../helpers/fode-urls";
 import { adminAuthStatePath, requireAdminAuthState } from "../helpers/auth-helper";
 import { capturePageErrors, expectNoStartupErrors, expectNoWrongSurface, runtimeVersionLabel, writeRunSummary } from "../helpers/assertions";
 import { evidenceDir, getAppTarget, readTargetText, screenshot, writeJson } from "../helpers/evidence-helper";
@@ -10,6 +10,7 @@ test.use(fs.existsSync(adminAuthStatePath) ? { storageState: adminAuthStatePath 
 test("Legacy Admin surface remains reachable and read-only inspectable", async ({ page }) => {
   requireAdminAuthState();
   const env = fodeEnv();
+  assertHeadAllowed(env);
   const dir = evidenceDir("legacy-admin-health");
   const pageErrors = capturePageErrors(page);
 
@@ -26,6 +27,11 @@ test("Legacy Admin surface remains reachable and read-only inspectable", async (
   await screenshot(page, dir, "legacy-admin-health");
   writeJson(dir, "legacy-admin-health", {
     url: page.url(),
+    testedUrl: env.testedUrl,
+    targetKind: env.targetKind,
+    expectedRuntime: env.expectedRuntime || "",
+    expectedDeploy: env.expectedDeploy || "",
+    acceptHead: env.acceptHead,
     capturedAt: new Date().toISOString(),
     pageErrors,
     textSample: text.slice(0, 3000),
@@ -34,8 +40,8 @@ test("Legacy Admin surface remains reachable and read-only inspectable", async (
   writeRunSummary(dir, {
     testName: "Legacy Admin health",
     status: "PASS",
-    version: runtimeVersionLabel(env.expectedVersion, env.expectedVersionNumber),
+    version: runtimeVersionLabel(env.expectedRuntime, env.expectedDeploy),
     pageErrors,
-    summary: "Legacy Admin / Document Verification surface was reachable and inspectable without startup errors."
+    summary: `URL=${env.testedUrl} targetKind=${env.targetKind}. Legacy Admin / Document Verification surface was reachable and inspectable without startup errors.`
   });
 });
